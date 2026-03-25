@@ -1,14 +1,20 @@
+/**
+ * Webpack configuration for Extra Chill Studio.
+ *
+ * Extends the default wp-scripts config to add the standalone Roadie
+ * floating chat entry alongside the auto-discovered block entries.
+ *
+ * Block entries (src/blocks/studio/) are auto-discovered by wp-scripts
+ * from block.json. The Roadie entry is appended manually.
+ */
 const defaultConfig = require( '@wordpress/scripts/config/webpack.config' );
-const path = require( 'path' );
 
 module.exports = {
 	...defaultConfig,
 	entry: {
-		index: path.resolve( __dirname, 'blocks/studio/src/index.ts' ),
-		view: path.resolve( __dirname, 'blocks/studio/src/view.ts' ),
-	},
-	output: {
-		...defaultConfig.output,
-		path: path.resolve( __dirname, 'dist/studio' ),
+		...( typeof defaultConfig.entry === 'function'
+			? defaultConfig.entry()
+			: defaultConfig.entry ),
+		roadie: './src/roadie/index.ts',
 	},
 };
