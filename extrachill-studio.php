@@ -35,7 +35,6 @@ require_once EXTRACHILL_STUDIO_PLUGIN_DIR . 'inc/social-drafts.php';
 require_once EXTRACHILL_STUDIO_PLUGIN_DIR . 'inc/post-transfer.php';
 require_once EXTRACHILL_STUDIO_PLUGIN_DIR . 'inc/publish-router.php';
 require_once EXTRACHILL_STUDIO_PLUGIN_DIR . 'inc/compose-editor.php';
-require_once EXTRACHILL_STUDIO_PLUGIN_DIR . 'inc/roadie-chat.php';
 
 register_activation_hook( __FILE__, 'extrachill_studio_activate' );
 register_deactivation_hook( __FILE__, 'extrachill_studio_deactivate' );
