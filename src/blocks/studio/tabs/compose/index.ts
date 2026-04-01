@@ -76,9 +76,11 @@ const ComposePane = ( _props: StudioPaneProps ): ReactElement => {
 
 	const [ title, setTitle ] = useState( '' );
 	const [ isSubmitting, setIsSubmitting ] = useState( false );
+	const [ isSwitching, setIsSwitching ] = useState( false );
 	const [ status, setStatus ] = useState( '' );
 	const [ error, setError ] = useState( '' );
 	const [ editorReady, setEditorReady ] = useState( false );
+	const [ hasUnsavedChanges, setHasUnsavedChanges ] = useState( false );
 
 	// Draft management state.
 	const [ drafts, setDrafts ] = useState< WpPost[] >( [] );
@@ -176,12 +178,56 @@ const ComposePane = ( _props: StudioPaneProps ): ReactElement => {
 		}
 	}, [] );
 
-	/** Switch to a draft or start blank. Uses replaceContent — no remount. */
-	const switchToDraft = useCallback( ( post: WpPost | null ): void => {
+	/**
+	 * Flush any unsaved changes for the current draft before switching away.
+	 * Returns immediately if nothing to save or no active draft.
+	 */
+	const flushCurrentDraft = useCallback( async (): Promise< void > => {
 		if ( autosaveTimerRef.current ) {
 			clearTimeout( autosaveTimerRef.current );
 			autosaveTimerRef.current = null;
 		}
+
+		const postId = activePostIdRef.current;
+		if ( ! postId || isAutosavingRef.current ) {
+			return;
+		}
+
+		const currentTitle = titleRef.current.trim();
+		const currentContent = getContent().trim();
+
+		if ( ! currentTitle && ! currentContent ) {
+			return;
+		}
+
+		const payload = JSON.stringify( { title: currentTitle, content: currentContent } );
+		if ( payload === lastSavedPayloadRef.current ) {
+			return;
+		}
+
+		isAutosavingRef.current = true;
+
+		try {
+			await apiFetch< WpPost >( {
+				path: `/wp/v2/posts/${ postId }`,
+				method: 'POST',
+				data: { title: currentTitle, content: currentContent, status: 'draft' },
+			} );
+			lastSavedPayloadRef.current = payload;
+		} catch {
+			// Best-effort — don't block the switch.
+		} finally {
+			isAutosavingRef.current = false;
+		}
+	}, [] );
+
+	/**
+	 * Switch to a draft or start blank. Flushes any unsaved changes to the
+	 * current draft first, then replaces editor content via ContentBridge.
+	 */
+	const switchToDraft = useCallback( async ( post: WpPost | null ): Promise< void > => {
+		// Save current draft before switching away.
+		await flushCurrentDraft();
 
 		if ( post ) {
 			activePostIdRef.current = post.id;
@@ -205,13 +251,15 @@ const ComposePane = ( _props: StudioPaneProps ): ReactElement => {
 			lastSavedPayloadRef.current = '';
 		}
 
+		setPublishTargets( new Set() );
+		setHasUnsavedChanges( false );
 		setError( '' );
 		setStatus( '' );
 		scheduleClientContextUpdate();
-	}, [ scheduleClientContextUpdate ] );
+	}, [ flushCurrentDraft, scheduleClientContextUpdate ] );
 
-	const startNew = useCallback( (): void => {
-		switchToDraft( null );
+	const startNew = useCallback( async (): Promise< void > => {
+		await switchToDraft( null );
 	}, [ switchToDraft ] );
 
 	/** Autosave the current draft silently. */
@@ -243,6 +291,7 @@ const ComposePane = ( _props: StudioPaneProps ): ReactElement => {
 				data: { title: currentTitle, content: currentContent, status: 'draft' },
 			} );
 			lastSavedPayloadRef.current = payload;
+			setHasUnsavedChanges( false );
 		} catch {
 			// Silent — user can still manually save.
 		} finally {
@@ -346,6 +395,8 @@ const ComposePane = ( _props: StudioPaneProps ): ReactElement => {
 
 		const onContentChange = (): void => {
 			contentSnapshotRef.current = getContent();
+			const payload = JSON.stringify( { title: titleRef.current.trim(), content: contentSnapshotRef.current.trim() } );
+			setHasUnsavedChanges( payload !== lastSavedPayloadRef.current );
 			scheduleClientContextUpdate();
 			scheduleAutosave();
 		};
@@ -496,6 +547,7 @@ const ComposePane = ( _props: StudioPaneProps ): ReactElement => {
 			contentSnapshotRef.current = content;
 			setActivePostId( post.id );
 			lastSavedPayloadRef.current = JSON.stringify( { title: title.trim(), content } );
+			setHasUnsavedChanges( false );
 			setStatus( __( 'Draft saved.', 'extrachill-studio' ) );
 
 			const refreshed = await loadDrafts();
@@ -509,14 +561,26 @@ const ComposePane = ( _props: StudioPaneProps ): ReactElement => {
 		}
 	};
 
-	const onDraftSelect = ( e: ChangeEvent< HTMLSelectElement > ): void => {
-		const postId = Number.parseInt( e.target.value, 10 );
+	const onDraftSelect = async ( e: ChangeEvent< HTMLSelectElement > ): Promise< void > => {
+		const value = e.target.value;
+
+		// "New draft" selected.
+		if ( value === 'new' ) {
+			setIsSwitching( true );
+			await startNew();
+			setIsSwitching( false );
+			return;
+		}
+
+		const postId = Number.parseInt( value, 10 );
 		if ( ! postId ) {
 			return;
 		}
 		const post = drafts.find( ( d ) => d.id === postId );
 		if ( post ) {
-			switchToDraft( post );
+			setIsSwitching( true );
+			await switchToDraft( post );
+			setIsSwitching( false );
 		}
 	};
 
@@ -525,39 +589,36 @@ const ComposePane = ( _props: StudioPaneProps ): ReactElement => {
 		setTitle( e.target.value );
 		setError( '' );
 		setStatus( '' );
+		const currentContent = getContent().trim();
+		const payload = JSON.stringify( { title: e.target.value.trim(), content: currentContent } );
+		setHasUnsavedChanges( payload !== lastSavedPayloadRef.current );
 		scheduleClientContextUpdate();
 		scheduleAutosave();
 	};
 
-	const draftPicker = drafts.length > 0
-		? createElement(
-			'select',
-			{
-				className: 'ec-studio-compose-draft-picker',
-				value: activePostId || '',
-				onChange: onDraftSelect,
-				disabled: isLoadingDrafts,
-			},
+	const draftPicker = createElement(
+		'select',
+		{
+			className: 'ec-studio-compose-draft-picker',
+			value: activePostId || 'new',
+			onChange: onDraftSelect,
+			disabled: isLoadingDrafts || isSwitching,
+		},
+		createElement(
+			'option',
+			{ value: 'new' },
+			isLoadingDrafts
+				? __( 'Loading drafts…', 'extrachill-studio' )
+				: __( '+ New draft', 'extrachill-studio' )
+		),
+		...drafts.map( ( d ) =>
 			createElement(
 				'option',
-				{ value: '', disabled: true },
-				isLoadingDrafts
-					? __( 'Loading drafts…', 'extrachill-studio' )
-					: __( 'Select a draft…', 'extrachill-studio' )
-			),
-			...drafts.map( ( d ) =>
-				createElement(
-					'option',
-					{ key: d.id, value: d.id },
-					`#${ d.id } — ${ ( d.title.raw || d.title.rendered || __( 'Untitled', 'extrachill-studio' ) ).slice( 0, 50 ) }`
-				)
+				{ key: d.id, value: d.id },
+				`#${ d.id } — ${ ( d.title.raw || d.title.rendered || __( 'Untitled', 'extrachill-studio' ) ).slice( 0, 50 ) }`
 			)
 		)
-		: createElement(
-			'span',
-			{ className: 'ec-studio-compose-toolbar__empty' },
-			isLoadingDrafts ? __( 'Loading…', 'extrachill-studio' ) : __( 'No drafts yet', 'extrachill-studio' )
-		);
+	);
 
 	return h(
 		'div',
@@ -583,10 +644,13 @@ const ComposePane = ( _props: StudioPaneProps ): ReactElement => {
 									type: 'button',
 									className: 'button-1 button-small',
 									onClick: startNew,
-									disabled: isSubmitting,
+									disabled: isSubmitting || isSwitching || ! activePostId,
 								},
 								__( 'New', 'extrachill-studio' )
-							)
+							),
+							hasUnsavedChanges
+								? createElement( 'span', { className: 'ec-studio-compose-toolbar__unsaved' }, __( 'Unsaved changes', 'extrachill-studio' ) )
+								: null
 						)
 					)
 				} ),
@@ -646,26 +710,26 @@ const ComposePane = ( _props: StudioPaneProps ): ReactElement => {
 					createElement(
 						'button',
 						{
-							type: 'button',
-							className: 'button-1 button-medium',
-							onClick: submitForReview,
-							disabled: isSubmitting || ! editorReady,
-						},
-						isSubmitting ? __( 'Submitting…', 'extrachill-studio' ) : __( 'Submit for Review', 'extrachill-studio' )
-					),
-					createElement(
-						'button',
-						{
-							type: 'button',
-							className: 'button-1 button-medium button-secondary',
-							onClick: saveDraft,
-							disabled: isSubmitting || ! editorReady,
-						},
-						isSubmitting ? __( 'Saving…', 'extrachill-studio' ) : (
-							activePostId
-								? __( 'Update Draft', 'extrachill-studio' )
-								: __( 'Save Draft', 'extrachill-studio' )
-						)
+						type: 'button',
+						className: 'button-1 button-medium',
+						onClick: submitForReview,
+						disabled: isSubmitting || isSwitching || ! editorReady,
+					},
+					isSubmitting ? __( 'Submitting…', 'extrachill-studio' ) : __( 'Submit for Review', 'extrachill-studio' )
+				),
+				createElement(
+					'button',
+					{
+						type: 'button',
+						className: 'button-1 button-medium button-secondary',
+						onClick: saveDraft,
+						disabled: isSubmitting || isSwitching || ! editorReady,
+					},
+					isSubmitting ? __( 'Saving…', 'extrachill-studio' ) : (
+						activePostId
+							? __( 'Update Draft', 'extrachill-studio' )
+							: __( 'Save Draft', 'extrachill-studio' )
+					)
 					)
 				)
 			),

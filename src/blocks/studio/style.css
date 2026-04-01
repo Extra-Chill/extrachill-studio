@@ -444,6 +444,13 @@
 	color: var(--muted-text);
 }
 
+.ec-studio-compose-toolbar__unsaved {
+	font-size: var(--font-size-xs, 0.7rem);
+	color: var(--warning-color, #e6a23c);
+	font-style: italic;
+	white-space: nowrap;
+}
+
 .ec-studio-compose-title {
 	width: 100%;
 	padding: var(--spacing-sm) var(--spacing-md);
