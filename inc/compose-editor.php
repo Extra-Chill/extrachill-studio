@@ -23,7 +23,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @return array
  */
 function register_compose_context( array $contexts ): array {
-	$contexts['studio'] = [
+	$contexts['studio'] = array(
 		'type'         => 'studio',
 		'textarea'     => '#ec-studio-compose-content',
 		'container'    => '.ec-studio-compose-editor',
@@ -46,7 +46,7 @@ function register_compose_context( array $contexts ): array {
 		'editor_setup' => function ( $engine ) {
 			// Add .gutenberg-support body class so BE's scoped toolbar/component
 			// dark mode styles in style-index.min.css apply.
-			add_filter( 'body_class', [ $engine, 'body_class' ] );
+			add_filter( 'body_class', array( $engine, 'body_class' ) );
 
 			// The IBE renders inline (shouldIframe=false), not in an iframe.
 			// Theme root.css variables are available on the host page, but
@@ -54,7 +54,7 @@ function register_compose_context( array $contexts ): array {
 			// proper sizing.
 			add_action( 'wp_enqueue_scripts', __NAMESPACE__ . '\\enqueue_editor_inline_styles', 50 );
 		},
-	];
+	);
 
 	return $contexts;
 }

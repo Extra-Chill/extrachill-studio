@@ -33,7 +33,12 @@ function ec_studio_transcription_format_duration( float $seconds ): string {
 	$m     = intdiv( $total % 3600, 60 );
 	$s     = $total % 60;
 	if ( $h > 0 ) {
-		return sprintf( __( '%dh %dm', 'extrachill-studio' ), $h, $m );
+		return sprintf(
+			/* translators: 1: hours, 2: minutes */
+			__( '%1$dh %2$dm', 'extrachill-studio' ),
+			$h,
+			$m
+		);
 	}
 	return sprintf( '%d:%02d', $m, $s );
 }
@@ -67,7 +72,11 @@ function ec_studio_transcription_render_completion_email( array $args ): string 
 	$args = wp_parse_args( $args, $defaults );
 
 	$greeting = $args['recipient_name']
-		? sprintf( __( 'Hey %s,', 'extrachill-studio' ), esc_html( $args['recipient_name'] ) )
+		? sprintf(
+			/* translators: %s: recipient display name */
+			__( 'Hey %s,', 'extrachill-studio' ),
+			esc_html( $args['recipient_name'] )
+		)
 		: __( 'Hey,', 'extrachill-studio' );
 
 	$duration_label = ec_studio_transcription_format_duration( (float) $args['duration_sec'] );

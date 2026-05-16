@@ -6,13 +6,13 @@
  * Version: 0.15.1
  * Author: Chris Huber
  * Author URI: https://chubes.net
- * Requires Plugins: extrachill-users
+ * Requires Plugins: extrachill-users, data-machine
  * License: GPL v2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain: extrachill-studio
  * Requires at least: 6.9
  * Tested up to: 6.9
- * Requires PHP: 7.4
+ * Requires PHP: 8.2
  * Network: false
  *
  * @package ExtraChillStudio

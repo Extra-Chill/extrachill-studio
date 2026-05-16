@@ -268,7 +268,7 @@ function ec_studio_execute_sweatpants_token( array $input ): array|\WP_Error {
 		$callback_url = function_exists( 'rest_url' )
 			? rest_url( 'extrachill/v1/transcribe/callback' )
 			: '';
-		$response['callback_url']     = $callback_url ?: null;
+		$response['callback_url']     = '' !== $callback_url ? $callback_url : null;
 		$response['callback_secret']  = $secret;
 		$response['callback_issuer']  = EC_STUDIO_SWEATPANTS_TOKEN_ISSUER;
 		$response['callback_user_id'] = $user_id;

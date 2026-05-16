@@ -247,7 +247,10 @@ function ec_studio_execute_run_giveaway( array $input ): array|\WP_Error {
 		return new \WP_Error(
 			'no_valid_entries',
 			sprintf( 'No valid entries after filtering. %d comments, %d filtered out.', $stats['total_comments'], $stats['filtered_out'] ),
-			array( 'status' => 404, 'stats' => $stats )
+			array(
+				'status' => 404,
+				'stats'  => $stats,
+			)
 		);
 	}
 

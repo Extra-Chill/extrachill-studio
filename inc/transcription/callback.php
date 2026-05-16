@@ -352,7 +352,7 @@ function ec_studio_transcription_callback_send_email(
 
 		$body = ec_studio_transcription_render_completion_email(
 			array(
-				'recipient_name' => $user->display_name ?: $user->user_login,
+				'recipient_name' => '' !== $user->display_name ? $user->display_name : $user->user_login,
 				'filename'       => $filename,
 				'duration_sec'   => $duration_sec,
 				'segments'       => $segments,
