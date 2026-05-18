@@ -98,7 +98,7 @@ function ec_studio_transcription_handle_callback( \WP_REST_Request $request ) {
 	}
 
 	// --- Scope check --------------------------------------------------
-	$scope = isset( $payload['scope'] ) ? (string) $payload['scope'] : '';
+	$scope  = isset( $payload['scope'] ) ? (string) $payload['scope'] : '';
 	$scopes = array_filter( preg_split( '/\s+/', $scope ) );
 	if ( ! in_array( 'callback:write', $scopes, true ) ) {
 		return new \WP_Error( 'forbidden_scope', __( 'Token lacks callback:write scope.', 'extrachill-studio' ), array( 'status' => 403 ) );
@@ -223,9 +223,7 @@ function ec_studio_transcription_callback_create_draft(
 	string $filename,
 	string $transcript,
 	string $job_id,
-	array $stats,
-	array $full_body
-) {
+	array $stats) {
 	if ( ! function_exists( 'ec_cross_site_rest_request' ) ) {
 		return new \WP_Error(
 			'multisite_helper_missing',
@@ -381,7 +379,7 @@ function ec_studio_transcription_callback_send_email(
 			'subject'  => $subject,
 			'template' => 'extrachill/branded',
 			'context'  => array(
-				'recipient_name' => $user->display_name ?: $user->user_login,
+				'recipient_name' => $user->display_name ? $user->display_name : $user->user_login,
 				'preheader'      => __( 'Your transcription is ready', 'extrachill-studio' ),
 				'body_html'      => $body_html,
 				'cta_url'        => $edit_url,

@@ -33,7 +33,8 @@ function ec_studio_transcription_format_duration( float $seconds ): string {
 	$m     = intdiv( $total % 3600, 60 );
 	$s     = $total % 60;
 	if ( $h > 0 ) {
-		return sprintf( __( '%dh %dm', 'extrachill-studio' ), $h, $m );
+		/* translators: 1: hours, 2: minutes */
+		return sprintf( __( '%1$dh %2$dm', 'extrachill-studio' ), $h, $m );
 	}
 	return sprintf( '%d:%02d', $m, $s );
 }
@@ -70,7 +71,7 @@ function ec_studio_transcription_render_completion_email( array $args ): string 
 		'has_speakers' => false,
 		'preview'      => '',
 	);
-	$args = wp_parse_args( $args, $defaults );
+	$args     = wp_parse_args( $args, $defaults );
 
 	$duration_label = ec_studio_transcription_format_duration( (float) $args['duration_sec'] );
 
@@ -82,7 +83,7 @@ function ec_studio_transcription_render_completion_email( array $args ): string 
 		? '<blockquote style="margin:0 0 16px 0;padding:12px 16px;border-left:3px solid #53940b;background:#f8f8f8;color:#444;font-style:italic;">' . esc_html( $args['preview'] ) . '</blockquote>'
 		: '';
 
-	$body  = '<p style="margin:0 0 16px 0;font-size:16px;line-height:1.6;">' . sprintf(
+	$body = '<p style="margin:0 0 16px 0;font-size:16px;line-height:1.6;">' . sprintf(
 		/* translators: %s: source recording filename */
 		esc_html__( 'Your transcription of %s is ready.', 'extrachill-studio' ),
 		'<strong>' . esc_html( $args['filename'] ) . '</strong>'
