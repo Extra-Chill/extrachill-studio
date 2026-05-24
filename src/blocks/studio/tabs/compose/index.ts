@@ -36,6 +36,17 @@ interface WpPost {
 	status: string;
 	date: string;
 	modified: string;
+	modified_gmt?: string;
+}
+
+interface WpAutosave {
+	id: number;
+	parent: number;
+	author: number;
+	title?: { rendered: string; raw?: string };
+	content?: { rendered: string; raw?: string };
+	modified?: string;
+	modified_gmt?: string;
 }
 
 /** Autosave debounce interval in milliseconds. */
@@ -283,16 +294,45 @@ const ComposePane = ( props: StudioPaneProps ): ReactElement => {
 
 		if ( post ) {
 			activePostIdRef.current = post.id;
-			titleRef.current = post.title.raw || post.title.rendered || '';
 			setActivePostId( post.id );
-			setTitle( post.title.raw || post.title.rendered || '' );
-			const content = post.content.raw || post.content.rendered || '';
+
+			// Since autosaves migrated to /wp/v2/posts/<id>/autosaves (per-user
+			// revision rows), the parent post body returned in the drafts list
+			// is stale relative to in-flight typing. Check for a user autosave
+			// newer than the parent and prefer it. Falls back to parent on any
+			// error so the picker always works.
+			let title = post.title.raw || post.title.rendered || '';
+			let content = post.content.raw || post.content.rendered || '';
+			try {
+				const currentUser = ( select( 'core' ) as { getCurrentUser?: () => { id?: number } | undefined } )
+					.getCurrentUser?.();
+				const currentUserId = currentUser?.id;
+				if ( currentUserId ) {
+					const autosaves = await apiFetch< WpAutosave[] >( {
+						path: `/wp/v2/posts/${ post.id }/autosaves?context=edit`,
+					} );
+					const userAutosave = Array.isArray( autosaves )
+						? autosaves.find( ( a ) => a?.author === currentUserId )
+						: null;
+					if (
+						userAutosave &&
+						userAutosave.modified_gmt &&
+						post.modified_gmt &&
+						userAutosave.modified_gmt > post.modified_gmt
+					) {
+						title = userAutosave.title?.raw || title;
+						content = userAutosave.content?.raw || content;
+					}
+				}
+			} catch {
+				// Best-effort recovery — fall back to parent content silently.
+			}
+
+			titleRef.current = title;
+			setTitle( title );
 			contentSnapshotRef.current = content;
 			replaceEditorContent( content );
-			lastSavedPayloadRef.current = JSON.stringify( {
-				title: post.title.raw || post.title.rendered || '',
-				content,
-			} );
+			lastSavedPayloadRef.current = JSON.stringify( { title, content } );
 		} else {
 			activePostIdRef.current = null;
 			titleRef.current = '';
