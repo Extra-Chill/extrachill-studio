@@ -92,6 +92,7 @@ const ComposePane = ( _props: StudioPaneProps ): ReactElement => {
 	const pendingRerunRef = useRef( false );
 	const consecutiveFailuresRef = useRef( 0 );
 	const autosaveErrorActiveRef = useRef( false );
+	const hasUnsavedChangesRef = useRef( false );
 	const activePostIdRef = useRef< number | null >( null );
 	const titleRef = useRef( '' );
 	const contentSnapshotRef = useRef( '' );
@@ -521,6 +522,27 @@ const ComposePane = ( _props: StudioPaneProps ): ReactElement => {
 			}
 		};
 	}, [ scheduleAutosave, performAutosave, scheduleClientContextUpdate ] );
+
+	// Sync hasUnsavedChanges state into a ref so the beforeunload/pagehide
+	// listeners (registered once with stale closures) can read the latest
+	// value without re-binding on every change.
+	useEffect( () => {
+		hasUnsavedChangesRef.current = hasUnsavedChanges;
+	}, [ hasUnsavedChanges ] );
+
+	// beforeunload guard: native browser prompt when navigating away with
+	// unsaved changes. Registered once; the handler reads from a ref.
+	useEffect( () => {
+		const handler = ( e: BeforeUnloadEvent ): void => {
+			if ( hasUnsavedChangesRef.current ) {
+				e.preventDefault();
+				// Legacy property required by some browsers for the prompt to fire.
+				e.returnValue = '';
+			}
+		};
+		window.addEventListener( 'beforeunload', handler );
+		return () => window.removeEventListener( 'beforeunload', handler );
+	}, [] );
 
 	const submitForReview = async (): Promise< void > => {
 		const content = getContent();
