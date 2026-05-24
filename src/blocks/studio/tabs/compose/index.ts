@@ -67,7 +67,8 @@ function extractPlainText( html: string ): string {
  * a new draft on first activity when none is active (title or content must
  * be non-empty), then updates the same draft on subsequent autosaves.
  */
-const ComposePane = ( _props: StudioPaneProps ): ReactElement => {
+const ComposePane = ( props: StudioPaneProps ): ReactElement => {
+	const restNonce = props.context.restNonce;
 	const textareaRef = useRef< HTMLTextAreaElement >( null );
 	const editorMountedRef = useRef( false );
 
@@ -533,16 +534,52 @@ const ComposePane = ( _props: StudioPaneProps ): ReactElement => {
 	// beforeunload guard: native browser prompt when navigating away with
 	// unsaved changes. Registered once; the handler reads from a ref.
 	useEffect( () => {
-		const handler = ( e: BeforeUnloadEvent ): void => {
+		const beforeUnloadHandler = ( e: BeforeUnloadEvent ): void => {
 			if ( hasUnsavedChangesRef.current ) {
 				e.preventDefault();
 				// Legacy property required by some browsers for the prompt to fire.
 				e.returnValue = '';
 			}
 		};
-		window.addEventListener( 'beforeunload', handler );
-		return () => window.removeEventListener( 'beforeunload', handler );
-	}, [] );
+
+		// pagehide + sendBeacon: best-effort last-write when the tab is being
+		// torn down. Fires for tab close, navigation, and bfcache suspension.
+		// sendBeacon is the only request that's guaranteed to be delivered
+		// during unload — apiFetch/XHR will be cancelled.
+		//
+		// Limitation: when no postId exists yet (initial draft never created),
+		// there's no /autosaves endpoint to target. We accept that loss; the
+		// next session will start blank rather than firing a synchronous POST
+		// to /wp/v2/posts (which sendBeacon also can't reliably do for create
+		// because we'd never see the returned ID).
+		const pageHideHandler = (): void => {
+			if ( ! hasUnsavedChangesRef.current ) {
+				return;
+			}
+			const postId = activePostIdRef.current;
+			if ( ! postId ) {
+				return;
+			}
+			try {
+				const body = JSON.stringify( {
+					title: titleRef.current.trim(),
+					content: contentSnapshotRef.current.trim(),
+				} );
+				const blob = new Blob( [ body ], { type: 'application/json' } );
+				const url = `/wp-json/wp/v2/posts/${ postId }/autosaves?_wpnonce=${ encodeURIComponent( restNonce ) }`;
+				navigator.sendBeacon( url, blob );
+			} catch {
+				// Best-effort — nothing else we can do during unload.
+			}
+		};
+
+		window.addEventListener( 'beforeunload', beforeUnloadHandler );
+		window.addEventListener( 'pagehide', pageHideHandler );
+		return () => {
+			window.removeEventListener( 'beforeunload', beforeUnloadHandler );
+			window.removeEventListener( 'pagehide', pageHideHandler );
+		};
+	}, [ restNonce ] );
 
 	const submitForReview = async (): Promise< void > => {
 		const content = getContent();
