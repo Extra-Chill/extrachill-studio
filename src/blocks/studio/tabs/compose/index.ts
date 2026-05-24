@@ -219,22 +219,28 @@ const ComposePane = ( _props: StudioPaneProps ): ReactElement => {
 		isAutosavingRef.current = true;
 
 		try {
-			const path = postId ? `/wp/v2/posts/${ postId }` : '/wp/v2/posts';
-			// Only set status on initial create — on update, omit it so out-of-band
-			// transitions to pending/publish are not silently demoted back to draft.
-			const data: Record< string, unknown > = { title: currentTitle, content: currentContent };
-			if ( ! postId ) {
-				data.status = 'draft';
-			}
-			const post = await apiFetch< WpPost >( {
-				path,
-				method: 'POST',
-				data,
-			} );
-			// Capture new ID on first-create so subsequent saves target the same draft.
-			if ( ! postId && post?.id ) {
-				activePostIdRef.current = post.id;
-				setActivePostId( post.id );
+			// Initial create: POST /wp/v2/posts with status=draft.
+			// Subsequent saves: POST /wp/v2/posts/<id>/autosaves (no status — preserves parent
+			// post status, so out-of-band transitions to pending/publish are not demoted).
+			// The /autosaves endpoint returns a revision object (id = revision ID, parent = post ID).
+			// Do NOT overwrite activePostIdRef with the revision ID.
+			if ( postId ) {
+				await apiFetch( {
+					path: `/wp/v2/posts/${ postId }/autosaves`,
+					method: 'POST',
+					data: { title: currentTitle, content: currentContent },
+				} );
+			} else {
+				const post = await apiFetch< WpPost >( {
+					path: '/wp/v2/posts',
+					method: 'POST',
+					data: { title: currentTitle, content: currentContent, status: 'draft' },
+				} );
+				// Capture new ID on first-create so subsequent saves target the same draft.
+				if ( post?.id ) {
+					activePostIdRef.current = post.id;
+					setActivePostId( post.id );
+				}
 			}
 			lastSavedPayloadRef.current = payload;
 		} catch {
@@ -313,23 +319,29 @@ const ComposePane = ( _props: StudioPaneProps ): ReactElement => {
 		isAutosavingRef.current = true;
 
 		try {
-			const path = postId ? `/wp/v2/posts/${ postId }` : '/wp/v2/posts';
-			// Only set status on initial create — on update, omit it so out-of-band
-			// transitions to pending/publish are not silently demoted back to draft.
-			const data: Record< string, unknown > = { title: currentTitle, content: currentContent };
-			if ( ! postId ) {
-				data.status = 'draft';
-			}
-			const post = await apiFetch< WpPost >( {
-				path,
-				method: 'POST',
-				data,
-			} );
-			// Capture new ID on first-create so subsequent autosaves
-			// update the same draft instead of creating duplicates.
-			if ( ! postId && post?.id ) {
-				activePostIdRef.current = post.id;
-				setActivePostId( post.id );
+			// Initial create: POST /wp/v2/posts with status=draft.
+			// Subsequent autosaves: POST /wp/v2/posts/<id>/autosaves (no status — preserves
+			// parent status, so out-of-band transitions to pending/publish are not demoted).
+			// The /autosaves endpoint returns a revision object (id = revision ID, parent = post ID).
+			// Do NOT overwrite activePostIdRef with the revision ID — the parent ID is stable.
+			if ( postId ) {
+				await apiFetch( {
+					path: `/wp/v2/posts/${ postId }/autosaves`,
+					method: 'POST',
+					data: { title: currentTitle, content: currentContent },
+				} );
+			} else {
+				const post = await apiFetch< WpPost >( {
+					path: '/wp/v2/posts',
+					method: 'POST',
+					data: { title: currentTitle, content: currentContent, status: 'draft' },
+				} );
+				// Capture new ID on first-create so subsequent autosaves
+				// update the same draft instead of creating duplicates.
+				if ( post?.id ) {
+					activePostIdRef.current = post.id;
+					setActivePostId( post.id );
+				}
 			}
 			lastSavedPayloadRef.current = payload;
 			setHasUnsavedChanges( false );
