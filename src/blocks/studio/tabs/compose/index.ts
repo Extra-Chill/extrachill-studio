@@ -88,6 +88,7 @@ const ComposePane = ( _props: StudioPaneProps ): ReactElement => {
 	const autosaveTimerRef = useRef< ReturnType< typeof setTimeout > | null >( null );
 	const lastSavedPayloadRef = useRef( '' );
 	const isAutosavingRef = useRef( false );
+	const pendingRerunRef = useRef( false );
 	const activePostIdRef = useRef< number | null >( null );
 	const titleRef = useRef( '' );
 	const contentSnapshotRef = useRef( '' );
@@ -296,7 +297,10 @@ const ComposePane = ( _props: StudioPaneProps ): ReactElement => {
 	 * subsequent autosaves update the same draft.
 	 */
 	const performAutosave = useCallback( async (): Promise< void > => {
+		// If a save is already in flight, mark a rerun and bail; the in-flight
+		// save's finally block will pick up the latest content when it completes.
 		if ( isAutosavingRef.current ) {
+			pendingRerunRef.current = true;
 			return;
 		}
 
@@ -349,6 +353,12 @@ const ComposePane = ( _props: StudioPaneProps ): ReactElement => {
 			// Silent — user can still manually save.
 		} finally {
 			isAutosavingRef.current = false;
+			// Re-run if input arrived while we were saving so the latest
+			// content reaches the server instead of being silently dropped.
+			if ( pendingRerunRef.current ) {
+				pendingRerunRef.current = false;
+				performAutosave();
+			}
 		}
 	}, [] );
 
