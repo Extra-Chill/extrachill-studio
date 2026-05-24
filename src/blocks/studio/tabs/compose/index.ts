@@ -90,6 +90,8 @@ const ComposePane = ( _props: StudioPaneProps ): ReactElement => {
 	const isAutosavingRef = useRef( false );
 	const inFlightPromiseRef = useRef< Promise< void > | null >( null );
 	const pendingRerunRef = useRef( false );
+	const consecutiveFailuresRef = useRef( 0 );
+	const autosaveErrorActiveRef = useRef( false );
 	const activePostIdRef = useRef< number | null >( null );
 	const titleRef = useRef( '' );
 	const contentSnapshotRef = useRef( '' );
@@ -371,8 +373,26 @@ const ComposePane = ( _props: StudioPaneProps ): ReactElement => {
 				}
 				lastSavedPayloadRef.current = payload;
 				setHasUnsavedChanges( false );
-			} catch {
-				// Silent — user can still manually save.
+				// Successful save — reset failure counter and clear any prior
+				// autosave error message (but not manual save errors).
+				consecutiveFailuresRef.current = 0;
+				if ( autosaveErrorActiveRef.current ) {
+					autosaveErrorActiveRef.current = false;
+					setError( '' );
+				}
+			} catch ( err ) {
+				consecutiveFailuresRef.current += 1;
+				// Surface the error in the UI after 2 consecutive failures so a
+				// single transient blip doesn't spook the user, but real
+				// outages become visible.
+				if ( consecutiveFailuresRef.current >= 2 ) {
+					const message = ( err as Error )?.message || __( 'Unknown error', 'extrachill-studio' );
+					autosaveErrorActiveRef.current = true;
+					setError(
+						/* translators: 1: number of consecutive failures, 2: error message */
+						`${ __( 'Autosave failed', 'extrachill-studio' ) } (${ consecutiveFailuresRef.current } ${ __( 'attempt(s)', 'extrachill-studio' ) }): ${ message }`
+					);
+				}
 			} finally {
 				isAutosavingRef.current = false;
 				inFlightPromiseRef.current = null;
