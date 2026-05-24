@@ -88,6 +88,7 @@ const ComposePane = ( _props: StudioPaneProps ): ReactElement => {
 	const autosaveTimerRef = useRef< ReturnType< typeof setTimeout > | null >( null );
 	const lastSavedPayloadRef = useRef( '' );
 	const isAutosavingRef = useRef( false );
+	const inFlightPromiseRef = useRef< Promise< void > | null >( null );
 	const pendingRerunRef = useRef( false );
 	const activePostIdRef = useRef< number | null >( null );
 	const titleRef = useRef( '' );
@@ -199,8 +200,17 @@ const ComposePane = ( _props: StudioPaneProps ): ReactElement => {
 			autosaveTimerRef.current = null;
 		}
 
-		if ( isAutosavingRef.current ) {
-			return;
+		// If a save is in flight, wait for it to finish instead of bailing.
+		// Bailing here silently discards keystrokes when the user switches
+		// drafts during an in-flight save. Capture the promise locally so we
+		// don't deadlock on our own subsequent save.
+		const inFlight = inFlightPromiseRef.current;
+		if ( inFlight ) {
+			try {
+				await inFlight;
+			} catch {
+				// In-flight save already handled its own errors; proceed.
+			}
 		}
 
 		const postId = activePostIdRef.current;
@@ -219,36 +229,44 @@ const ComposePane = ( _props: StudioPaneProps ): ReactElement => {
 
 		isAutosavingRef.current = true;
 
-		try {
-			// Initial create: POST /wp/v2/posts with status=draft.
-			// Subsequent saves: POST /wp/v2/posts/<id>/autosaves (no status — preserves parent
-			// post status, so out-of-band transitions to pending/publish are not demoted).
-			// The /autosaves endpoint returns a revision object (id = revision ID, parent = post ID).
-			// Do NOT overwrite activePostIdRef with the revision ID.
-			if ( postId ) {
-				await apiFetch( {
-					path: `/wp/v2/posts/${ postId }/autosaves`,
-					method: 'POST',
-					data: { title: currentTitle, content: currentContent },
-				} );
-			} else {
-				const post = await apiFetch< WpPost >( {
-					path: '/wp/v2/posts',
-					method: 'POST',
-					data: { title: currentTitle, content: currentContent, status: 'draft' },
-				} );
-				// Capture new ID on first-create so subsequent saves target the same draft.
-				if ( post?.id ) {
-					activePostIdRef.current = post.id;
-					setActivePostId( post.id );
+		// Expose our save as the in-flight promise so any concurrent autosave
+		// or flush waits for us instead of racing.
+		const operation = ( async (): Promise< void > => {
+			try {
+				// Initial create: POST /wp/v2/posts with status=draft.
+				// Subsequent saves: POST /wp/v2/posts/<id>/autosaves (no status — preserves
+				// parent status, so out-of-band transitions to pending/publish are not demoted).
+				// The /autosaves endpoint returns a revision object (id = revision ID, parent = post ID).
+				// Do NOT overwrite activePostIdRef with the revision ID.
+				if ( postId ) {
+					await apiFetch( {
+						path: `/wp/v2/posts/${ postId }/autosaves`,
+						method: 'POST',
+						data: { title: currentTitle, content: currentContent },
+					} );
+				} else {
+					const post = await apiFetch< WpPost >( {
+						path: '/wp/v2/posts',
+						method: 'POST',
+						data: { title: currentTitle, content: currentContent, status: 'draft' },
+					} );
+					// Capture new ID on first-create so subsequent saves target the same draft.
+					if ( post?.id ) {
+						activePostIdRef.current = post.id;
+						setActivePostId( post.id );
+					}
 				}
+				lastSavedPayloadRef.current = payload;
+			} catch {
+				// Best-effort — don't block the switch.
+			} finally {
+				isAutosavingRef.current = false;
+				inFlightPromiseRef.current = null;
 			}
-			lastSavedPayloadRef.current = payload;
-		} catch {
-			// Best-effort — don't block the switch.
-		} finally {
-			isAutosavingRef.current = false;
-		}
+		} )();
+
+		inFlightPromiseRef.current = operation;
+		await operation;
 	}, [] );
 
 	/**
@@ -322,44 +340,53 @@ const ComposePane = ( _props: StudioPaneProps ): ReactElement => {
 
 		isAutosavingRef.current = true;
 
-		try {
-			// Initial create: POST /wp/v2/posts with status=draft.
-			// Subsequent autosaves: POST /wp/v2/posts/<id>/autosaves (no status — preserves
-			// parent status, so out-of-band transitions to pending/publish are not demoted).
-			// The /autosaves endpoint returns a revision object (id = revision ID, parent = post ID).
-			// Do NOT overwrite activePostIdRef with the revision ID — the parent ID is stable.
-			if ( postId ) {
-				await apiFetch( {
-					path: `/wp/v2/posts/${ postId }/autosaves`,
-					method: 'POST',
-					data: { title: currentTitle, content: currentContent },
-				} );
-			} else {
-				const post = await apiFetch< WpPost >( {
-					path: '/wp/v2/posts',
-					method: 'POST',
-					data: { title: currentTitle, content: currentContent, status: 'draft' },
-				} );
-				// Capture new ID on first-create so subsequent autosaves
-				// update the same draft instead of creating duplicates.
-				if ( post?.id ) {
-					activePostIdRef.current = post.id;
-					setActivePostId( post.id );
+		// Expose the in-flight operation as a promise so flushCurrentDraft (and
+		// other callers that need to await a save) can wait for it without
+		// re-issuing a duplicate request.
+		const operation = ( async (): Promise< void > => {
+			try {
+				// Initial create: POST /wp/v2/posts with status=draft.
+				// Subsequent autosaves: POST /wp/v2/posts/<id>/autosaves (no status — preserves
+				// parent status, so out-of-band transitions to pending/publish are not demoted).
+				// The /autosaves endpoint returns a revision object (id = revision ID, parent = post ID).
+				// Do NOT overwrite activePostIdRef with the revision ID — the parent ID is stable.
+				if ( postId ) {
+					await apiFetch( {
+						path: `/wp/v2/posts/${ postId }/autosaves`,
+						method: 'POST',
+						data: { title: currentTitle, content: currentContent },
+					} );
+				} else {
+					const post = await apiFetch< WpPost >( {
+						path: '/wp/v2/posts',
+						method: 'POST',
+						data: { title: currentTitle, content: currentContent, status: 'draft' },
+					} );
+					// Capture new ID on first-create so subsequent autosaves
+					// update the same draft instead of creating duplicates.
+					if ( post?.id ) {
+						activePostIdRef.current = post.id;
+						setActivePostId( post.id );
+					}
+				}
+				lastSavedPayloadRef.current = payload;
+				setHasUnsavedChanges( false );
+			} catch {
+				// Silent — user can still manually save.
+			} finally {
+				isAutosavingRef.current = false;
+				inFlightPromiseRef.current = null;
+				// Re-run if input arrived while we were saving so the latest
+				// content reaches the server instead of being silently dropped.
+				if ( pendingRerunRef.current ) {
+					pendingRerunRef.current = false;
+					performAutosave();
 				}
 			}
-			lastSavedPayloadRef.current = payload;
-			setHasUnsavedChanges( false );
-		} catch {
-			// Silent — user can still manually save.
-		} finally {
-			isAutosavingRef.current = false;
-			// Re-run if input arrived while we were saving so the latest
-			// content reaches the server instead of being silently dropped.
-			if ( pendingRerunRef.current ) {
-				pendingRerunRef.current = false;
-				performAutosave();
-			}
-		}
+		} )();
+
+		inFlightPromiseRef.current = operation;
+		await operation;
 	}, [] );
 
 	const scheduleAutosave = useCallback( (): void => {
