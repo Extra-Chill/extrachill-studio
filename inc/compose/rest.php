@@ -647,7 +647,7 @@ function ec_studio_compose_upload_media( \WP_REST_Request $request ) {
 	if ( ! in_array( $file_type['type'], $allowed_types, true ) ) {
 		return new \WP_Error(
 			'invalid_file_type',
-			__( 'Invalid file type. Only JPG, PNG, GIF, and WebP images are allowed.', 'extrachill-studio' ),
+			__( "That file isn't a supported image. Please upload a JPG, PNG, GIF, or WebP image.", 'extrachill-studio' ),
 			array( 'status' => 400 )
 		);
 	}
@@ -659,6 +659,18 @@ function ec_studio_compose_upload_media( \WP_REST_Request $request ) {
 			__( 'Could not resolve the main site for media upload.', 'extrachill-studio' ),
 			array( 'status' => 500 )
 		);
+	}
+
+	// Enforce the size limit against MAIN's allowance — that's where the file
+	// is actually written. Surface a clear, actionable message (file size +
+	// limit + what to do) rather than letting wp_handle_upload fail opaquely.
+	// This is the server-side backstop; the editor also validates client-side
+	// before the upload starts (see the maxUploadFileSize editor setting),
+	// which catches the common case (and absurdly large files) without a
+	// round trip.
+	$size_error = ec_studio_compose_check_upload_size( $uploaded_file, $main_blog_id );
+	if ( is_wp_error( $size_error ) ) {
+		return $size_error;
 	}
 
 	$user_id = (int) get_current_user_id();
@@ -720,6 +732,50 @@ function ec_studio_compose_upload_media( \WP_REST_Request $request ) {
 	}
 
 	return rest_ensure_response( $result );
+}
+
+/**
+ * Validate an uploaded file against main extrachill.com's upload size limit.
+ *
+ * The image is written to MAIN (blog 1), so the limit that matters is main's
+ * `wp_max_upload_size()` — not Studio's. Returns a WP_Error with a clear,
+ * non-technical, actionable message (naming the file's size and the limit, and
+ * telling the writer to resize/compress) when the file is too large.
+ *
+ * Note: files larger than the platform's edge/proxy limits (Cloudflare,
+ * nginx) are rejected before the request ever reaches PHP — the editor's
+ * client-side check is the first and primary line of defense against those.
+ * This server-side guard catches the in-between band and any non-editor
+ * caller, and guarantees a friendly JSON error instead of an opaque
+ * wp_handle_upload failure.
+ *
+ * @since 0.16.0
+ *
+ * @param array $uploaded_file The $_FILES entry for the upload.
+ * @param int   $main_blog_id  Resolved main blog id.
+ * @return true|\WP_Error True when within limits, WP_Error otherwise.
+ */
+function ec_studio_compose_check_upload_size( array $uploaded_file, int $main_blog_id ) {
+	$file_size = isset( $uploaded_file['size'] ) ? (int) $uploaded_file['size'] : 0;
+
+	switch_to_blog( $main_blog_id );
+	$max_size = (int) wp_max_upload_size();
+	restore_current_blog();
+
+	if ( $max_size <= 0 || $file_size <= $max_size ) {
+		return true;
+	}
+
+	return new \WP_Error(
+		'file_too_large',
+		sprintf(
+			/* translators: 1: the uploaded file's size (e.g. "40 MB"), 2: the maximum allowed size (e.g. "2 MB"). */
+			__( 'That image is too large (%1$s). The maximum upload size is %2$s — please resize or compress the image and try again.', 'extrachill-studio' ),
+			size_format( $file_size ),
+			size_format( $max_size )
+		),
+		array( 'status' => 413 )
+	);
 }
 
 /**

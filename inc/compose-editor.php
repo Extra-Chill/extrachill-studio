@@ -17,6 +17,35 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
+ * Resolve main extrachill.com's maximum upload size in bytes.
+ *
+ * Compose images are written to MAIN (blog 1), so the editor's client-side
+ * size check must validate against main's allowance — not Studio's. Resolved
+ * inside main's blog context so PHP ini + WP filters for the destination site
+ * apply. Falls back to the local limit if multisite helpers are unavailable.
+ *
+ * @since 0.16.0
+ *
+ * @return int Max upload size in bytes.
+ */
+function extrachill_studio_compose_main_max_upload_size(): int {
+	if ( ! function_exists( 'ec_get_blog_id' ) ) {
+		return (int) wp_max_upload_size();
+	}
+
+	$main_blog_id = (int) ec_get_blog_id( 'main' );
+	if ( $main_blog_id <= 0 ) {
+		return (int) wp_max_upload_size();
+	}
+
+	switch_to_blog( $main_blog_id );
+	$max = (int) wp_max_upload_size();
+	restore_current_blog();
+
+	return $max;
+}
+
+/**
  * Register the Studio compose editor as a Blocks Everywhere context.
  *
  * @param array $contexts Registered contexts.
@@ -179,6 +208,21 @@ function configure_compose_editor( array $settings ): array {
 	// Provide MIME types so the Media tab in the inserter can show
 	// existing uploads filtered by type (images, video, audio).
 	$settings['editor']['allowedMimeTypes'] = get_allowed_mime_types();
+
+	// Set the client-side upload size limit so the editor rejects oversized
+	// images instantly — before any upload starts — with a clear message,
+	// rather than letting them fail opaquely at the server.
+	//
+	// Two reasons this is set explicitly here:
+	//   1. In this Blocks Everywhere frontend context, core resolves
+	//      maxUploadFileSize to 0, which DISABLES client-side size validation
+	//      entirely (the guard is `if ( maxUploadFileSize && ... )`). Setting a
+	//      real value re-enables it.
+	//   2. Compose images are written to MAIN (blog 1), so the limit that
+	//      matters is main's wp_max_upload_size(), not Studio's. We resolve it
+	//      in main's context so the client-side check matches the server-side
+	//      enforcement in the compose media proxy route.
+	$settings['maxUploadFileSize'] = (int) extrachill_studio_compose_main_max_upload_size();
 
 	// Provide Studio-specific REST endpoints.
 	$settings['studio'] = array(
