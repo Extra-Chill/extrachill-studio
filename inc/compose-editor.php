@@ -238,12 +238,6 @@ function configure_compose_editor( array $settings ): array {
 	//      enforcement in the compose media proxy route.
 	$settings['maxUploadFileSize'] = (int) extrachill_studio_compose_main_max_upload_size();
 
-	// Provide Studio-specific REST endpoints.
-	$settings['studio'] = array(
-		'postsEndpoint' => rest_url( 'wp/v2/posts' ),
-		'mediaEndpoint' => rest_url( 'extrachill/v1/media' ),
-	);
-
 	// Expose IBE's More Menu so writers can toggle fullscreen mode and
 	// keyboard shortcuts. Default to non-fullscreen on boot — users opt in
 	// via the menu (or Ctrl/Cmd+Shift+Alt+F). Fullscreen-state CSS lives
