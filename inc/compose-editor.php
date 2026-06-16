@@ -209,6 +209,20 @@ function configure_compose_editor( array $settings ): array {
 	// existing uploads filtered by type (images, video, audio).
 	$settings['editor']['allowedMimeTypes'] = get_allowed_mime_types();
 
+	// Enable the editor's image upload affordances (upload button, drag-and-
+	// drop onto the canvas, the Media Library tab's upload). Blocks Everywhere
+	// gates ALL of this — including whether it runs wp_enqueue_media() — on
+	// editor.hasUploadPermissions, and defaults it to unset (falsy). Without
+	// this flag the writer gets no working way to add an image at all, which
+	// is the confusing part of the experience.
+	//
+	// Gate on the WP core capability. Team members have `upload_files` on both
+	// Studio and main (the destination), so the editor enables uploads and the
+	// cross-site media proxy's write to main succeeds under the same user's
+	// caps. The proxy route enforces the capability again server-side, so this
+	// flag only governs UI affordances, never trust.
+	$settings['editor']['hasUploadPermissions'] = current_user_can( 'upload_files' );
+
 	// Set the client-side upload size limit so the editor rejects oversized
 	// images instantly — before any upload starts — with a clear message,
 	// rather than letting them fail opaquely at the server.
