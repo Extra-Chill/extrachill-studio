@@ -398,12 +398,16 @@ function ec_studio_compose_create_autosave( \WP_REST_Request $request ) {
 	$post_id = (int) $request['id'];
 
 	// Only title/content are forwarded — status is intentionally never sent on
-	// autosave (see docblock).
+	// autosave (see docblock). Title/content are passed through unaltered:
+	// main's /wp/v2/posts autosave controller is the single sanitization
+	// authority and expects unslashed input, which get_json_params() returns.
+	// Pre-sanitizing here would double-process and mangle legitimate
+	// characters (e.g. backslashes), so we don't.
 	$raw  = $request->get_json_params();
 	$body = array();
 	if ( is_array( $raw ) ) {
 		if ( isset( $raw['title'] ) ) {
-			$body['title'] = sanitize_text_field( wp_unslash( (string) $raw['title'] ) );
+			$body['title'] = (string) $raw['title'];
 		}
 		if ( isset( $raw['content'] ) ) {
 			$body['content'] = (string) $raw['content'];
@@ -427,16 +431,25 @@ function ec_studio_compose_create_autosave( \WP_REST_Request $request ) {
  * Sanitize the post params accepted from the compose pane.
  *
  * Whitelists the small set of fields the compose pane sends — title, content,
- * status — so the proxy never forwards arbitrary REST fields cross-site. The
- * `status` value is validated against the lifecycle states the compose pane
- * is allowed to set (draft, pending). Content is left unescaped because the
- * block editor produces post HTML that main's `/wp/v2/posts` controller
- * sanitizes with the author's capabilities (post caps re-checked on main).
+ * status — so the proxy never forwards arbitrary REST fields cross-site.
+ *
+ * Title and content are passed through unaltered. Main's `/wp/v2/posts`
+ * controller is the single sanitization authority: it sanitizes the title via
+ * its schema and sanitizes post HTML with the author's capabilities (post caps
+ * are re-checked on main under the user's own auth). It expects UNSLASHED
+ * input, which `get_json_params()` returns — REST JSON bodies are not slashed.
+ * Pre-sanitizing or unslashing here would double-process and corrupt
+ * legitimate characters (e.g. backslashes), so we don't.
+ *
+ * The only field the proxy actively gates is `status`: it is validated against
+ * the lifecycle states the compose pane is allowed to set (draft, pending) —
+ * a policy gate, not sanitization — so the tool can never push a post straight
+ * to publish.
  *
  * @since 0.16.0
  *
  * @param mixed $raw Raw JSON params.
- * @return array Sanitized post params.
+ * @return array Whitelisted post params.
  */
 function ec_studio_compose_sanitize_post_params( $raw ): array {
 	$params = array();
@@ -446,7 +459,7 @@ function ec_studio_compose_sanitize_post_params( $raw ): array {
 	}
 
 	if ( isset( $raw['title'] ) ) {
-		$params['title'] = sanitize_text_field( wp_unslash( (string) $raw['title'] ) );
+		$params['title'] = (string) $raw['title'];
 	}
 
 	if ( isset( $raw['content'] ) ) {
