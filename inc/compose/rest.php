@@ -27,6 +27,8 @@
  *   - POST /extrachill/v1/studio/compose/posts/<id>            Update / submit-for-review on main.
  *   - GET  /extrachill/v1/studio/compose/posts/<id>/autosaves  List autosaves for a draft on main.
  *   - POST /extrachill/v1/studio/compose/posts/<id>/autosaves  Autosave a draft on main (status omitted).
+ *   - GET  /extrachill/v1/studio/compose/media                 Browse main's media library (inserter grid).
+ *   - GET  /extrachill/v1/studio/compose/media/<id>            Fetch a single attachment on main.
  *   - POST /extrachill/v1/studio/compose/media                 Upload an image into main's media library.
  *
  * The frontend installs an apiFetch middleware that rewrites the compose
@@ -128,9 +130,33 @@ function ec_studio_compose_register_routes(): void {
 		'/' . EC_STUDIO_COMPOSE_ROUTE . '/media',
 		array(
 			array(
+				'methods'             => 'GET',
+				'callback'            => 'ec_studio_compose_list_media',
+				'permission_callback' => 'ec_studio_compose_permission_check',
+			),
+			array(
 				'methods'             => 'POST',
 				'callback'            => 'ec_studio_compose_upload_media',
 				'permission_callback' => 'ec_studio_compose_permission_check',
+			),
+		)
+	);
+
+	register_rest_route(
+		EC_STUDIO_COMPOSE_NAMESPACE,
+		'/' . EC_STUDIO_COMPOSE_ROUTE . '/media/(?P<id>\d+)',
+		array(
+			array(
+				'methods'             => 'GET',
+				'callback'            => 'ec_studio_compose_get_media_item',
+				'permission_callback' => 'ec_studio_compose_permission_check',
+				'args'                => array(
+					'id' => array(
+						'required'          => true,
+						'type'              => 'integer',
+						'sanitize_callback' => 'absint',
+					),
+				),
 			),
 		)
 	);
@@ -435,6 +461,138 @@ function ec_studio_compose_sanitize_post_params( $raw ): array {
 	}
 
 	return $params;
+}
+
+/**
+ * Browse main extrachill.com's media library for the inserter grid.
+ *
+ * The block editor's Media Library tab does `GET /wp/v2/media` (with search,
+ * pagination, and mime-type filters) to browse existing uploads. The frontend
+ * middleware rewrites that here so writers see and re-insert images from
+ * MAIN's library (blog 1) — consistent with where uploads land — instead of
+ * Studio's (blog 12) library.
+ *
+ * All query params are forwarded verbatim so the editor's search, paging, and
+ * media_type/mime_type filters work unchanged. The X-WP-Total /
+ * X-WP-TotalPages headers the inserter relies on for pagination are emitted by
+ * the core media controller during the in-process dispatch and surfaced here.
+ *
+ * @since 0.16.0
+ *
+ * @param \WP_REST_Request $request REST request.
+ * @return \WP_REST_Response|\WP_Error
+ */
+function ec_studio_compose_list_media( \WP_REST_Request $request ) {
+	if ( ! function_exists( 'ec_get_blog_id' ) ) {
+		return new \WP_Error(
+			'multisite_helper_missing',
+			__( 'extrachill-multisite is required for cross-site media browse.', 'extrachill-studio' ),
+			array( 'status' => 500 )
+		);
+	}
+
+	$query = $request->get_query_params();
+
+	// The core-data media grid reads X-WP-Total / X-WP-TotalPages headers off
+	// the raw response for pagination (apiFetch parse:false). The generic
+	// cross-site helper returns only the decoded body and strips those
+	// headers, so we dispatch in-process here and re-emit the pagination
+	// headers onto our own WP_REST_Response.
+	return ec_studio_compose_dispatch_media_list_on_main( is_array( $query ) ? $query : array() );
+}
+
+/**
+ * Dispatch a media-list query on main and return a paginated REST response.
+ *
+ * Runs `GET /wp/v2/media` inside `switch_to_blog( main )` via rest_do_request
+ * so we can read the core controller's X-WP-Total / X-WP-TotalPages headers
+ * and forward them — the inserter grid relies on them for pagination.
+ *
+ * @since 0.16.0
+ *
+ * @param array $query Query params forwarded from the editor.
+ * @return \WP_REST_Response|\WP_Error
+ */
+function ec_studio_compose_dispatch_media_list_on_main( array $query ) {
+	$main_blog_id = (int) ec_get_blog_id( 'main' );
+	if ( $main_blog_id <= 0 ) {
+		return new \WP_Error(
+			'main_blog_unresolved',
+			__( 'Could not resolve the main site for media browse.', 'extrachill-studio' ),
+			array( 'status' => 500 )
+		);
+	}
+
+	$result = null;
+
+	switch_to_blog( $main_blog_id );
+	try {
+		$sub = new \WP_REST_Request( 'GET', '/wp/v2/media' );
+		$sub->set_query_params( $query );
+		$sub->add_header( 'X-EC-Forwarded', '1' );
+
+		$sub_response = rest_do_request( $sub );
+
+		if ( $sub_response->is_error() ) {
+			$error  = $sub_response->as_error();
+			$data   = $error->get_error_data();
+			$status = is_array( $data ) && isset( $data['status'] ) ? (int) $data['status'] : 500;
+			$result = new \WP_Error(
+				$error->get_error_code() ? $error->get_error_code() : 'ec_cross_site_error',
+				$error->get_error_message() ? $error->get_error_message() : __( 'Cross-site media browse failed.', 'extrachill-studio' ),
+				array( 'status' => $status )
+			);
+		} else {
+			$response = rest_ensure_response( $sub_response->get_data() );
+			// Forward the pagination headers the grid reads via parse:false.
+			$headers = $sub_response->get_headers();
+			foreach ( array( 'X-WP-Total', 'X-WP-TotalPages' ) as $header ) {
+				if ( isset( $headers[ $header ] ) ) {
+					$response->header( $header, (string) $headers[ $header ] );
+				}
+			}
+			$result = $response;
+		}
+	} finally {
+		restore_current_blog();
+	}
+
+	return $result;
+}
+
+/**
+ * Fetch a single attachment from main extrachill.com.
+ *
+ * The editor fetches `/wp/v2/media/<id>` to hydrate an attachment after
+ * insertion or when re-resolving a block's media. Forwarded to main so the
+ * blog-1 attachment is returned.
+ *
+ * @since 0.16.0
+ *
+ * @param \WP_REST_Request $request REST request.
+ * @return \WP_REST_Response|\WP_Error
+ */
+function ec_studio_compose_get_media_item( \WP_REST_Request $request ) {
+	$guard = ec_studio_compose_require_cross_site();
+	if ( is_wp_error( $guard ) ) {
+		return $guard;
+	}
+
+	$user_id       = (int) get_current_user_id();
+	$attachment_id = (int) $request['id'];
+	$query         = $request->get_query_params();
+
+	$response = ec_cross_site_rest_request(
+		'main',
+		'GET',
+		'/wp/v2/media/' . $attachment_id,
+		array(
+			'query'   => is_array( $query ) ? $query : array(),
+			'user_id' => $user_id,
+		)
+	);
+
+	return ec_studio_compose_relay_response( $response );
 }
 
 /**

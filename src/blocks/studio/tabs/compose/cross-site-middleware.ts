@@ -59,6 +59,7 @@ function splitPath( path: string ): [ string, string ] {
  *   - /wp/v2/posts/<id>                 → /extrachill/v1/studio/compose/posts/<id>
  *   - /wp/v2/posts/<id>/autosaves       → /extrachill/v1/studio/compose/posts/<id>/autosaves
  *   - /wp/v2/media                      → /extrachill/v1/studio/compose/media
+ *   - /wp/v2/media/<id>                 → /extrachill/v1/studio/compose/media/<id>
  *
  * @param path Full apiFetch path including any query string.
  * @return Rewritten path, or null when no rewrite applies.
@@ -85,7 +86,13 @@ function rewritePath( path: string ): string | null {
 		return `${ PROXY_PREFIX }/posts${ query }`;
 	}
 
-	// /wp/v2/media (block editor inline image uploads)
+	// /wp/v2/media/<id> (single attachment hydrate after upload / re-resolve)
+	const mediaItemMatch = normalized.match( /^\/wp\/v2\/media\/(\d+)$/ );
+	if ( mediaItemMatch ) {
+		return `${ PROXY_PREFIX }/media/${ mediaItemMatch[ 1 ] }${ query }`;
+	}
+
+	// /wp/v2/media (uploads via POST + Media Library browse grid via GET)
 	if ( normalized === '/wp/v2/media' ) {
 		return `${ PROXY_PREFIX }/media${ query }`;
 	}
