@@ -35,32 +35,18 @@
 defined( 'ABSPATH' ) || exit;
 
 /*
- * Event-name contract constants (Extra-Chill/extrachill-users#129).
- * ----------------------------------------------------------------
- * The Studio analytics event_type strings are defined ONCE here and
- * referenced by every Studio emit site, so a rename is mechanical and a
- * scattered-literal typo can't silently desync an emit from the shared
- * contract (the "permanently-zero metric, no error" failure mode).
- *
- * Scope: these constants cover only the event types extrachill-studio
- * emits. The read-side rollup lives in extrachill-users and owns its own
- * constants for the same names — matching by documented contract, with no
- * load-time cross-plugin dependency in either direction.
+ * Event-name contract (Extra-Chill/extrachill-users#129).
+ * -------------------------------------------------------
+ * The canonical Studio event_type names are defined ONCE in
+ * extrachill-analytics (inc/core/event-types.php) as the
+ * `EC_ANALYTICS_EVENT_STUDIO_*` constants. extrachill-analytics owns the
+ * analytics substrate and the `extrachill/track-analytics-event` ability
+ * this helper already calls at runtime, and is network-active, so those
+ * constants are guaranteed present wherever Studio emits — referencing
+ * them adds no new coupling. Studio's emit sites reference the analytics
+ * constants directly (no local copies of the literal strings), so a
+ * rename happens in exactly one place across the whole network.
  */
-const EC_STUDIO_EVENT_DRAFT_CREATED        = 'studio_draft_created';
-const EC_STUDIO_EVENT_SUBMITTED_FOR_REVIEW = 'studio_submitted_for_review';
-const EC_STUDIO_EVENT_TRANSCRIPTION_RUN    = 'studio_transcription_run';
-
-/**
- * Full set of event types emitted by extrachill-studio.
- *
- * @var string[]
- */
-const EC_STUDIO_TEAM_EXPERIENCE_EVENTS = array(
-	EC_STUDIO_EVENT_DRAFT_CREATED,
-	EC_STUDIO_EVENT_SUBMITTED_FOR_REVIEW,
-	EC_STUDIO_EVENT_TRANSCRIPTION_RUN,
-);
 
 /**
  * Emit a Studio team-experience analytics event via the canonical ability.
