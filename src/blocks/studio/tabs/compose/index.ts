@@ -10,6 +10,7 @@ import {
 import { ActionRow, FieldGroup, InlineStatus, Panel, PanelHeader } from '@extrachill/components';
 import type { StudioPaneProps } from '../../types/studio';
 import { setComposeCrossSiteActive } from './cross-site-middleware';
+import { installChatRefreshAdapter } from './refresh-adapter';
 
 const h = createElement as typeof import( 'react' ).createElement;
 const PanelView = Panel as unknown as ( props: any ) => ReactElement;
@@ -19,7 +20,10 @@ const InlineStatusView = InlineStatus as unknown as ( props: any ) => ReactEleme
 
 declare global {
 	interface Window {
-		blocksEverywhereCreateEditor?: ( textarea: HTMLTextAreaElement ) => void;
+		blocksEverywhereCreateEditor?: (
+			textarea: HTMLTextAreaElement,
+			options?: { settings?: Record< string, unknown > }
+		) => void;
 		blocksEverywhereGetContentApi?: ( textarea: HTMLTextAreaElement ) => BlocksEverywhereContentApi | null;
 	}
 }
@@ -181,6 +185,76 @@ const ComposePane = ( props: StudioPaneProps ): ReactElement => {
 			api.replaceContent( html );
 		}
 	};
+
+	/**
+	 * Refetch the current content of a post from main via the compose
+	 * cross-site proxy (active while the Blog tab is mounted). Returns the
+	 * post's raw block markup, or an empty string on any failure.
+	 */
+	const fetchPostContent = useCallback(
+		async ( postId: number ): Promise< string > => {
+			try {
+				const post = await apiFetch< WpPost >( {
+					path: `/wp/v2/posts/${ postId }?context=edit`,
+				} );
+				return post?.content?.raw || post?.content?.rendered || '';
+			} catch {
+				return '';
+			}
+		},
+		[]
+	);
+
+	/**
+	 * Blocks Everywhere external-edit refresh wiring.
+	 *
+	 * When Roadie writes the active draft (via the chat accept path → the
+	 * refresh adapter → BE's receiver), the open editor refetches and replaces
+	 * its content. Studio owns post identity, the fetch, and the autosave
+	 * baseline, so it supplies all four hooks; BE owns the replace + post-id
+	 * matching. Held in a ref so the object identity is stable across renders
+	 * (BE reads it once at mount) while the getters read live values.
+	 */
+	const refreshConfigRef = useRef( {
+		// Getter — the active draft changes via the draft picker over the
+		// editor's lifetime, so BE must read the current id per event.
+		watchPostId: (): number | null => activePostIdRef.current,
+		fetchContent: async (): Promise< string > => {
+			const postId = activePostIdRef.current;
+			if ( ! postId ) {
+				return '';
+			}
+			return fetchPostContent( postId );
+		},
+		beforeRefresh: async (): Promise< void > => {
+			// Cancel a pending debounced autosave and await any in-flight one so
+			// our baseline reset is not immediately overwritten by a stale save.
+			if ( autosaveTimerRef.current ) {
+				clearTimeout( autosaveTimerRef.current );
+				autosaveTimerRef.current = null;
+			}
+			const inFlight = inFlightPromiseRef.current;
+			if ( inFlight ) {
+				try {
+					await inFlight;
+				} catch {
+					// In-flight save handled its own errors; proceed.
+				}
+			}
+		},
+		onRefreshed: ( html: string ): void => {
+			// Reset the autosave baseline to the freshly-applied content so the
+			// NEXT autosave carries the external edit forward instead of
+			// re-clobbering it with the stale in-memory snapshot.
+			contentSnapshotRef.current = html;
+			lastSavedPayloadRef.current = JSON.stringify( {
+				title: titleRef.current.trim(),
+				content: html.trim(),
+			} );
+			setHasUnsavedChanges( false );
+			scheduleClientContextUpdate();
+		},
+	} );
 
 	/**
 	 * Fetch the current user's drafts from the REST API.
@@ -492,6 +566,14 @@ const ComposePane = ( props: StudioPaneProps ): ReactElement => {
 		};
 	}, [] );
 
+	// Bridge the chat's action-resolved event to BE's refresh-content event for
+	// the lifetime of this pane. The adapter is the only place both event names
+	// co-exist; BE's receiver (configured via refreshConfigRef below) matches
+	// the post id and ignores events for any other draft.
+	useEffect( () => {
+		return installChatRefreshAdapter();
+	}, [] );
+
 	useEffect( () => {
 		unregisterClientContextRef.current = registerClientContextProvider( {
 			id: CLIENT_CONTEXT_PROVIDER_ID,
@@ -546,10 +628,18 @@ const ComposePane = ( props: StudioPaneProps ): ReactElement => {
 				contentSnapshotRef.current = '';
 			}
 
-			// Mount the editor — it reads textarea.value via onLoad.
+			// Mount the editor — it reads textarea.value via onLoad. Pass the
+			// external-edit refresh wiring so an accepted Roadie edit refreshes
+			// the open editor instead of being clobbered by the next autosave.
 			if ( ! editorMountedRef.current && textareaRef.current ) {
 				if ( typeof window.blocksEverywhereCreateEditor === 'function' ) {
-					window.blocksEverywhereCreateEditor( textareaRef.current );
+					window.blocksEverywhereCreateEditor( textareaRef.current, {
+						settings: {
+							blocksEverywhere: {
+								refresh: refreshConfigRef.current,
+							},
+						},
+					} );
 					editorMountedRef.current = true;
 					setEditorReady( true );
 				} else {
