@@ -2,6 +2,13 @@ import apiFetch from '@wordpress/api-fetch';
 import { ExtraChillClient } from '@extrachill/api-client';
 import { WpApiFetchTransport } from '@extrachill/api-client/wordpress';
 import type { SocialMediaUploadResponse } from '@extrachill/api-client';
+import type {
+	AnalyticsSummaryResponse,
+	ConversionMapResponse,
+	GaDateStatsResponse,
+	RetentionResponse,
+	SurfaceGrowthResponse,
+} from '../types/analytics';
 
 export const studioClient = new ExtraChillClient( new WpApiFetchTransport( apiFetch ) );
 
@@ -135,6 +142,111 @@ export const studioSocialsApi = {
 			data: {
 				comment_id: commentId,
 				message,
+			},
+		} );
+	},
+};
+
+/**
+ * Network-tab analytics reads.
+ *
+ * Mirrors the raw-`apiFetch` style of `studioSocialsApi` above — NO new fetch
+ * layer (per extrachill-studio#84, three JS API clients already coexist; we do
+ * not add a fourth). `apiFetch` injects the REST nonce globally, so these
+ * typed methods just build the query and hit the route.
+ *
+ * The four first-party routes are extrachill-api wrappers around
+ * extrachill-analytics abilities (relaxed to the team-readable tier in
+ * extrachill-analytics#95). The GA4 sessions route is Data Machine Business's
+ * generic analytics route; it is NOT yet team-accessible (depends on a DM
+ * read-only analytics cap + an Extra Chill `user_has_cap` grant still in
+ * flight — see extrachill-studio#104's permission-model comment), so its caller
+ * must tolerate a 403/401/404 and degrade gracefully rather than error.
+ */
+export const studioAnalyticsApi = {
+	/** GET /extrachill/v1/analytics/summary — event counts by type over a window. */
+	getSummary(
+		params: { days?: number; event_type?: string; blog_id?: number } = {}
+	): Promise< AnalyticsSummaryResponse > {
+		const query = new URLSearchParams();
+		if ( params.days !== undefined ) {
+			query.set( 'days', String( params.days ) );
+		}
+		if ( params.event_type ) {
+			query.set( 'event_type', params.event_type );
+		}
+		if ( params.blog_id ) {
+			query.set( 'blog_id', String( params.blog_id ) );
+		}
+		const qs = query.toString();
+		return apiFetch( { path: `/extrachill/v1/analytics/summary${ qs ? `?${ qs }` : '' }` } );
+	},
+
+	/** GET /extrachill/v1/analytics/surface-growth — ranked cross-surface growth. */
+	getSurfaceGrowth( params: { weeks?: number } = {} ): Promise< SurfaceGrowthResponse > {
+		const query = new URLSearchParams();
+		if ( params.weeks !== undefined ) {
+			query.set( 'weeks', String( params.weeks ) );
+		}
+		const qs = query.toString();
+		return apiFetch( { path: `/extrachill/v1/analytics/surface-growth${ qs ? `?${ qs }` : '' }` } );
+	},
+
+	/** GET /extrachill/v1/analytics/retention — visitor return-rate + cohorts. */
+	getRetention(
+		params: { days?: number; blog_id?: number; cohort_weeks?: number } = {}
+	): Promise< RetentionResponse > {
+		const query = new URLSearchParams();
+		if ( params.days !== undefined ) {
+			query.set( 'days', String( params.days ) );
+		}
+		if ( params.blog_id ) {
+			query.set( 'blog_id', String( params.blog_id ) );
+		}
+		if ( params.cohort_weeks !== undefined ) {
+			query.set( 'cohort_weeks', String( params.cohort_weeks ) );
+		}
+		const qs = query.toString();
+		return apiFetch( { path: `/extrachill/v1/analytics/retention${ qs ? `?${ qs }` : '' }` } );
+	},
+
+	/** GET /extrachill/v1/analytics/conversion-map — article -> platform reach. */
+	getConversionMap(
+		params: { days?: number; top_articles?: number; min_entry_sessions?: number } = {}
+	): Promise< ConversionMapResponse > {
+		const query = new URLSearchParams();
+		if ( params.days !== undefined ) {
+			query.set( 'days', String( params.days ) );
+		}
+		if ( params.top_articles !== undefined ) {
+			query.set( 'top_articles', String( params.top_articles ) );
+		}
+		if ( params.min_entry_sessions !== undefined ) {
+			query.set( 'min_entry_sessions', String( params.min_entry_sessions ) );
+		}
+		const qs = query.toString();
+		return apiFetch( { path: `/extrachill/v1/analytics/conversion-map${ qs ? `?${ qs }` : '' }` } );
+	},
+
+	/**
+	 * POST /datamachine/v1/analytics/ga (action: date_stats) — daily sessions.
+	 *
+	 * Not yet team-accessible. Callers MUST catch and inspect the error: a 401/
+	 * 403 (and a 404 if the route is absent on this install) is the expected
+	 * "admins only / coming soon" path, not a failure to surface to the user.
+	 */
+	getGaDateStats(
+		params: { hostname?: string; start_date: string; end_date: string; limit?: number }
+	): Promise< GaDateStatsResponse > {
+		return apiFetch( {
+			path: '/datamachine/v1/analytics/ga',
+			method: 'POST',
+			data: {
+				action: 'date_stats',
+				...( params.hostname ? { hostname: params.hostname } : {} ),
+				start_date: params.start_date,
+				end_date: params.end_date,
+				...( params.limit !== undefined ? { limit: params.limit } : {} ),
 			},
 		} );
 	},
