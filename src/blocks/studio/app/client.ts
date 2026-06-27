@@ -10,7 +10,9 @@ import type {
 	SurfaceGrowthResponse,
 } from '../types/analytics';
 
-export const studioClient = new ExtraChillClient( new WpApiFetchTransport( apiFetch ) );
+export const studioClient = new ExtraChillClient(
+	new WpApiFetchTransport( apiFetch )
+);
 
 interface InstagramMediaParams {
 	action?: string;
@@ -87,7 +89,9 @@ interface CommentReplyResponse {
 }
 
 export const studioSocialsApi = {
-	getInstagramMedia( params: InstagramMediaParams = {} ): Promise< InstagramMediaResponse > {
+	getInstagramMedia(
+		params: InstagramMediaParams = {}
+	): Promise< InstagramMediaResponse > {
 		const query = new URLSearchParams( {
 			action: params.action || 'list',
 			...( params.media_id ? { media_id: params.media_id } : {} ),
@@ -95,10 +99,15 @@ export const studioSocialsApi = {
 			...( params.after ? { after: params.after } : {} ),
 		} );
 
-		return apiFetch( { path: `/datamachine/v1/socials/instagram/media?${ query.toString() }` } );
+		return apiFetch( {
+			path: `/datamachine/v1/socials/instagram/media?${ query.toString() }`,
+		} );
 	},
 
-	getInstagramComments( mediaId: string, params: { limit?: number; after?: string } = {} ): Promise< InstagramCommentsResponse > {
+	getInstagramComments(
+		mediaId: string,
+		params: { limit?: number; after?: string } = {}
+	): Promise< InstagramCommentsResponse > {
 		const query = new URLSearchParams( {
 			action: 'comments',
 			media_id: mediaId,
@@ -106,10 +115,15 @@ export const studioSocialsApi = {
 			...( params.after ? { after: params.after } : {} ),
 		} );
 
-		return apiFetch( { path: `/datamachine/v1/socials/instagram/media?${ query.toString() }` } );
+		return apiFetch( {
+			path: `/datamachine/v1/socials/instagram/media?${ query.toString() }`,
+		} );
 	},
 
-	replyToInstagramComment( commentId: string, message: string ): Promise< unknown > {
+	replyToInstagramComment(
+		commentId: string,
+		message: string
+	): Promise< unknown > {
 		return apiFetch( {
 			path: '/datamachine/v1/socials/instagram/comments/reply',
 			method: 'POST',
@@ -122,20 +136,34 @@ export const studioSocialsApi = {
 
 	/**
 	 * Generic comments API — fetch all comments for a post, normalized.
+	 * @param platform
+	 * @param mediaId
 	 */
-	getAllComments( platform: string, mediaId: string ): Promise< GenericCommentsResponse > {
+	getAllComments(
+		platform: string,
+		mediaId: string
+	): Promise< GenericCommentsResponse > {
 		const query = new URLSearchParams( {
 			media_id: mediaId,
 			all: 'true',
 		} );
 
-		return apiFetch( { path: `/datamachine/v1/socials/comments/${ platform }?${ query.toString() }` } );
+		return apiFetch( {
+			path: `/datamachine/v1/socials/comments/${ platform }?${ query.toString() }`,
+		} );
 	},
 
 	/**
 	 * Generic comment reply API.
+	 * @param platform
+	 * @param commentId
+	 * @param message
 	 */
-	replyToComment( platform: string, commentId: string, message: string ): Promise< CommentReplyResponse > {
+	replyToComment(
+		platform: string,
+		commentId: string,
+		message: string
+	): Promise< CommentReplyResponse > {
 		return apiFetch( {
 			path: `/datamachine/v1/socials/comments/${ platform }/reply`,
 			method: 'POST',
@@ -164,7 +192,13 @@ export const studioSocialsApi = {
  * must tolerate a 403/401/404 and degrade gracefully rather than error.
  */
 export const studioAnalyticsApi = {
-	/** GET /extrachill/v1/analytics/summary — event counts by type over a window. */
+	/**
+	 * GET /extrachill/v1/analytics/summary — event counts by type over a window.
+	 * @param params
+	 * @param params.days
+	 * @param params.event_type
+	 * @param params.blog_id
+	 */
 	getSummary(
 		params: { days?: number; event_type?: string; blog_id?: number } = {}
 	): Promise< AnalyticsSummaryResponse > {
@@ -179,20 +213,38 @@ export const studioAnalyticsApi = {
 			query.set( 'blog_id', String( params.blog_id ) );
 		}
 		const qs = query.toString();
-		return apiFetch( { path: `/extrachill/v1/analytics/summary${ qs ? `?${ qs }` : '' }` } );
+		return apiFetch( {
+			path: `/extrachill/v1/analytics/summary${ qs ? `?${ qs }` : '' }`,
+		} );
 	},
 
-	/** GET /extrachill/v1/analytics/surface-growth — ranked cross-surface growth. */
-	getSurfaceGrowth( params: { weeks?: number } = {} ): Promise< SurfaceGrowthResponse > {
+	/**
+	 * GET /extrachill/v1/analytics/surface-growth — ranked cross-surface growth.
+	 * @param params
+	 * @param params.weeks
+	 */
+	getSurfaceGrowth(
+		params: { weeks?: number } = {}
+	): Promise< SurfaceGrowthResponse > {
 		const query = new URLSearchParams();
 		if ( params.weeks !== undefined ) {
 			query.set( 'weeks', String( params.weeks ) );
 		}
 		const qs = query.toString();
-		return apiFetch( { path: `/extrachill/v1/analytics/surface-growth${ qs ? `?${ qs }` : '' }` } );
+		return apiFetch( {
+			path: `/extrachill/v1/analytics/surface-growth${
+				qs ? `?${ qs }` : ''
+			}`,
+		} );
 	},
 
-	/** GET /extrachill/v1/analytics/retention — visitor return-rate + cohorts. */
+	/**
+	 * GET /extrachill/v1/analytics/retention — visitor return-rate + cohorts.
+	 * @param params
+	 * @param params.days
+	 * @param params.blog_id
+	 * @param params.cohort_weeks
+	 */
 	getRetention(
 		params: { days?: number; blog_id?: number; cohort_weeks?: number } = {}
 	): Promise< RetentionResponse > {
@@ -207,12 +259,24 @@ export const studioAnalyticsApi = {
 			query.set( 'cohort_weeks', String( params.cohort_weeks ) );
 		}
 		const qs = query.toString();
-		return apiFetch( { path: `/extrachill/v1/analytics/retention${ qs ? `?${ qs }` : '' }` } );
+		return apiFetch( {
+			path: `/extrachill/v1/analytics/retention${ qs ? `?${ qs }` : '' }`,
+		} );
 	},
 
-	/** GET /extrachill/v1/analytics/conversion-map — article -> platform reach. */
+	/**
+	 * GET /extrachill/v1/analytics/conversion-map — article -> platform reach.
+	 * @param params
+	 * @param params.days
+	 * @param params.top_articles
+	 * @param params.min_entry_sessions
+	 */
 	getConversionMap(
-		params: { days?: number; top_articles?: number; min_entry_sessions?: number } = {}
+		params: {
+			days?: number;
+			top_articles?: number;
+			min_entry_sessions?: number;
+		} = {}
 	): Promise< ConversionMapResponse > {
 		const query = new URLSearchParams();
 		if ( params.days !== undefined ) {
@@ -222,10 +286,17 @@ export const studioAnalyticsApi = {
 			query.set( 'top_articles', String( params.top_articles ) );
 		}
 		if ( params.min_entry_sessions !== undefined ) {
-			query.set( 'min_entry_sessions', String( params.min_entry_sessions ) );
+			query.set(
+				'min_entry_sessions',
+				String( params.min_entry_sessions )
+			);
 		}
 		const qs = query.toString();
-		return apiFetch( { path: `/extrachill/v1/analytics/conversion-map${ qs ? `?${ qs }` : '' }` } );
+		return apiFetch( {
+			path: `/extrachill/v1/analytics/conversion-map${
+				qs ? `?${ qs }` : ''
+			}`,
+		} );
 	},
 
 	/**
@@ -234,10 +305,18 @@ export const studioAnalyticsApi = {
 	 * Not yet team-accessible. Callers MUST catch and inspect the error: a 401/
 	 * 403 (and a 404 if the route is absent on this install) is the expected
 	 * "admins only / coming soon" path, not a failure to surface to the user.
+	 * @param params
+	 * @param params.hostname
+	 * @param params.start_date
+	 * @param params.end_date
+	 * @param params.limit
 	 */
-	getGaDateStats(
-		params: { hostname?: string; start_date: string; end_date: string; limit?: number }
-	): Promise< GaDateStatsResponse > {
+	getGaDateStats( params: {
+		hostname?: string;
+		start_date: string;
+		end_date: string;
+		limit?: number;
+	} ): Promise< GaDateStatsResponse > {
 		return apiFetch( {
 			path: '/datamachine/v1/analytics/ga',
 			method: 'POST',
@@ -246,13 +325,17 @@ export const studioAnalyticsApi = {
 				...( params.hostname ? { hostname: params.hostname } : {} ),
 				start_date: params.start_date,
 				end_date: params.end_date,
-				...( params.limit !== undefined ? { limit: params.limit } : {} ),
+				...( params.limit !== undefined
+					? { limit: params.limit }
+					: {} ),
 			},
 		} );
 	},
 };
 
-export const uploadStudioFile = async ( file: File ): Promise< SocialMediaUploadResponse > => {
+export const uploadStudioFile = async (
+	file: File
+): Promise< SocialMediaUploadResponse > => {
 	const formData = new FormData();
 	formData.append( 'file', file );
 
