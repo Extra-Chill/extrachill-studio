@@ -1,6 +1,7 @@
 {
   "id": "extrachill-studio",
   "changelog_target": "docs/CHANGELOG.md",
+  "validation_dependencies": ["data-machine", "extrachill-analytics"],
   "extensions": {
     "wordpress": {}
   },
