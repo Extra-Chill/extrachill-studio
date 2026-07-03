@@ -881,7 +881,7 @@ function ec_studio_compose_whitelist_post_params( $raw ): array {
 		if ( ! isset( $raw[ $field ] ) ) {
 			continue;
 		}
-		$ids = array_values(
+		$ids              = array_values(
 			array_unique(
 				array_filter(
 					array_map( 'absint', (array) $raw[ $field ] )
@@ -1194,6 +1194,7 @@ function ec_studio_compose_upload_media( \WP_REST_Request $request ) {
 	}
 
 	$files = $request->get_file_params();
+	// phpcs:ignore WordPress.Security.NonceVerification.Missing -- REST cookie nonce already validated by the auth layer; file params are validated below.
 	if ( empty( $files['file'] ) && isset( $_FILES['file'] ) ) {
 		$files['file'] = $_FILES['file']; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- REST cookie nonce already validated by the auth layer; file params are validated below.
 	}
