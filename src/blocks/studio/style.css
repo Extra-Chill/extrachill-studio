@@ -582,23 +582,6 @@
 	align-items: start;
 }
 
-/* Compose pane — full-width breakout (edge-to-edge with comfortable gutters).
- * Mirrors the theme `.full-width-breakout` primitive but uses the transform-
- * free `calc(50% - 50vw)` centering technique instead of transform:
- * translateX(-50%). A transform on this ancestor would establish a containing
- * block for the IBE fullscreen overlay's `position: fixed` (.iso-editor /
- * .interface-interface-skeleton pinned inset:0 below), breaking the fullscreen
- * writing mode. The margin-based breakout gives the same edge-to-edge layout
- * without that side effect. Scoped to the compose tab only. */
-.ec-studio-pane--compose {
-	width: 100vw;
-	max-width: 100vw;
-	margin-left: calc(50% - 50vw);
-	padding-left: max(var(--spacing-lg), env(safe-area-inset-left));
-	padding-right: max(var(--spacing-lg), env(safe-area-inset-right));
-	box-sizing: border-box;
-}
-
 .ec-studio-panel--editor {
 	display: flex;
 	flex-direction: column;
@@ -854,13 +837,6 @@
 @media (max-width: 768px) {
 	.ec-studio-pane__grid--compose {
 		grid-template-columns: 1fr;
-	}
-
-	/* Tighten the full-width breakout gutters on small screens (matches the
-	 * theme .full-width-breakout mobile padding). */
-	.ec-studio-pane--compose {
-		padding-left: max(0.75em, env(safe-area-inset-left));
-		padding-right: max(0.75em, env(safe-area-inset-right));
 	}
 }
 
