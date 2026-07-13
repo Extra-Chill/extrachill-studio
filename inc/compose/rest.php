@@ -881,7 +881,7 @@ function ec_studio_compose_whitelist_post_params( $raw ): array {
 		if ( ! isset( $raw[ $field ] ) ) {
 			continue;
 		}
-		$ids = array_values(
+		$ids              = array_values(
 			array_unique(
 				array_filter(
 					array_map( 'absint', (array) $raw[ $field ] )

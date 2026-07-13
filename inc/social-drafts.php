@@ -64,7 +64,7 @@ function register_social_meta() {
 				'schema' => array(
 					'type'  => 'array',
 					'items' => array(
-						'type' => 'object',
+						'type'       => 'object',
 						'properties' => array(
 							'url' => array( 'type' => 'string' ),
 						),
