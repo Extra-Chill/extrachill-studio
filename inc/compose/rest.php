@@ -508,6 +508,11 @@ function ec_studio_compose_create_post( \WP_REST_Request $request ) {
 		$user_id,
 		true
 	);
+	ec_studio_compose_notify_editor(
+		$response,
+		isset( $params['status'] ) ? (string) $params['status'] : 'draft',
+		$user_id
+	);
 
 	return ec_studio_compose_relay_response( $response );
 }
@@ -614,6 +619,11 @@ function ec_studio_compose_update_post( \WP_REST_Request $request ) {
 		$user_id,
 		false
 	);
+	ec_studio_compose_notify_editor(
+		$response,
+		isset( $params['status'] ) ? (string) $params['status'] : '',
+		$user_id
+	);
 
 	return ec_studio_compose_relay_response( $response );
 }
@@ -666,6 +676,116 @@ function ec_studio_compose_emit_lifecycle_event( $response, string $status, int 
 			array( 'post_id' => $post_id )
 		);
 	}
+}
+
+/**
+ * Notify the main site's editorial owner about a submitted Studio post.
+ *
+ * The network notification receipt makes this safe to call after both create
+ * and update requests: one post produces at most one editor alert even when a
+ * client retries the successful submit request.
+ *
+ * @param array|\WP_Error $response Cross-site write result.
+ * @param string          $status   Resolved post status that was written.
+ * @param int             $user_id  Submitting user ID.
+ * @return void
+ */
+function ec_studio_compose_notify_editor( $response, string $status, int $user_id ): void {
+	if ( 'pending' !== $status || is_wp_error( $response ) || ! function_exists( 'ec_users_notify_with_receipts' ) ) {
+		return;
+	}
+
+	$post_id = isset( $response['id'] ) ? (int) $response['id'] : 0;
+	if ( $post_id <= 0 ) {
+		return;
+	}
+
+	ec_studio_notify_editor_for_post( $post_id, $user_id );
+}
+
+/**
+ * Create an idempotent editorial-review notification for one pending post.
+ *
+ * Kept separate from the REST response adapter so the review-queue recovery
+ * scan can repair notifications for writes that bypassed the Compose proxy.
+ *
+ * @param int $post_id Post awaiting review on main.
+ * @param int $user_id Submitting user ID.
+ * @return bool True when the notification exists or was inserted.
+ */
+function ec_studio_notify_editor_for_post( int $post_id, int $user_id ): bool {
+	if ( $post_id <= 0 || $user_id <= 0 || ! function_exists( 'ec_users_notify_with_receipts' ) || ! function_exists( 'ec_get_blog_id' ) ) {
+		return false;
+	}
+
+	$main_blog_id = (int) ec_get_blog_id( 'main' );
+	if ( $main_blog_id <= 0 ) {
+		return false;
+	}
+
+	$recipient_id = 0;
+	$title        = '';
+	$link         = '';
+
+	switch_to_blog( $main_blog_id );
+	try {
+		$admin = get_user_by( 'email', (string) get_option( 'admin_email' ) );
+		if ( ! $admin instanceof \WP_User || ! user_can( $admin, 'edit_others_posts' ) ) {
+			$editors = get_users(
+				array(
+					'capability' => 'edit_others_posts',
+					'orderby'    => 'ID',
+					'order'      => 'ASC',
+				)
+			);
+			$admin = null;
+			foreach ( $editors as $editor ) {
+				if ( $editor instanceof \WP_User && user_can( $editor, 'edit_others_posts' ) ) {
+					$admin = $editor;
+					break;
+				}
+			}
+		}
+		$post  = get_post( $post_id );
+		if ( $admin instanceof \WP_User && $post instanceof \WP_Post && 'pending' === $post->post_status && user_can( $admin, 'edit_others_posts' ) ) {
+			$recipient_id = (int) $admin->ID;
+			$link         = (string) admin_url( 'post.php?post=' . $post_id . '&action=edit' );
+			/* translators: 1: author name, 2: submitted post title. */
+			$title = sprintf(
+				__( 'New post submitted for review by %1$s: %2$s', 'extrachill-studio' ),
+				(string) get_the_author_meta( 'display_name', $user_id ),
+				(string) get_the_title( $post )
+			);
+		}
+	} finally {
+		restore_current_blog();
+	}
+
+	if ( $recipient_id <= 0 || '' === $link || '' === $title ) {
+		return false;
+	}
+
+	$receipt = ec_users_notify_with_receipts(
+		array( $recipient_id ),
+		array(
+			'actor_id'        => $user_id,
+			'type'            => 'editorial_submission',
+			'link'            => $link,
+			'title'           => $title,
+			'item_id'         => $post_id,
+			'producer'        => 'extrachill-studio/editorial-review',
+			'idempotency_key' => 'submitted:' . $post_id,
+		)
+	);
+
+	$delivered = ( (int) ( $receipt['inserted'] ?? 0 ) + (int) ( $receipt['existing'] ?? 0 ) ) > 0;
+	if ( ! $delivered && defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+		error_log( // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Gated observability for a failed editor handoff.
+			sprintf( '[extrachill-studio] Failed to notify the editor about pending post %d.', $post_id )
+		);
+	}
+
+	return $delivered;
 }
 
 /**
