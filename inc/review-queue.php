@@ -186,17 +186,17 @@ function ec_studio_review_queue_schedule_notification_recovery(): void {
 }
 add_action( 'init', 'ec_studio_review_queue_schedule_notification_recovery' );
 
-/** Retry notifications for every pending post; delivery receipts deduplicate. */
+/** Retry notifications for every pending post; queued actions and receipts deduplicate. */
 function ec_studio_review_queue_recover_notifications(): void {
 	$main_blog_id = ec_studio_review_queue_main_blog_id();
-	if ( $main_blog_id <= 0 || ! function_exists( 'ec_studio_notify_editor_for_post' ) ) {
+	if ( $main_blog_id <= 0 || ! function_exists( 'ec_studio_schedule_editor_notification' ) ) {
 		return;
 	}
 
 	foreach ( ec_studio_review_queue_fetch_submissions( $main_blog_id ) as $submission ) {
 		$post_id   = (int) $submission['id'];
 		$author_id = (int) $submission['author_id'];
-		ec_studio_notify_editor_for_post( $post_id, $author_id );
+		ec_studio_schedule_editor_notification( $post_id, $author_id );
 	}
 }
 add_action( EC_STUDIO_REVIEW_NOTIFICATION_CRON, 'ec_studio_review_queue_recover_notifications' );
