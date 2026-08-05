@@ -123,5 +123,19 @@ describe( 'DateRangeInput lifecycle', () => {
 		expect( container.textContent ).toContain(
 			'ending no later than yesterday'
 		);
+
+		const custom = { startDate: '2026-07-10', endDate: '2026-07-22' };
+		act( () => {
+			root.render(
+				createElement( DateRangeInput, {
+					id: 'network-range',
+					value: custom,
+					onChange,
+				} )
+			);
+		} );
+		expect( container.textContent ).not.toContain(
+			'ending no later than yesterday'
+		);
 	} );
 } );

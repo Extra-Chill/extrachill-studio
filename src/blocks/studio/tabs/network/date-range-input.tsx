@@ -98,6 +98,9 @@ export const DateRangeInput = ( {
 
 	useEffect( () => {
 		const controller = controllerRef.current;
+		if ( controller ) {
+			setErrorMessage( '' );
+		}
 		const current = controller?.getRange();
 		if (
 			controller &&
