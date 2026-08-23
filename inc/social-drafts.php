@@ -29,6 +29,8 @@ const META_VIDEO_URL    = '_studio_social_video_url';
 const META_COVER_URL    = '_studio_social_cover_url';
 const META_PUBLISH_LOG  = '_studio_social_publish_log';
 const META_DELIVERY_REF = '_studio_social_delivery_ref';
+const META_SOURCE_POST  = '_studio_social_source_post_id';
+const META_SOURCE_URL   = '_studio_social_source_url';
 
 /**
  * Register post meta for social drafts.
@@ -136,6 +138,22 @@ function register_social_meta() {
 			'single'            => true,
 			'show_in_rest'      => true,
 			'sanitize_callback' => 'sanitize_text_field',
+		),
+		META_SOURCE_POST  => array(
+			'type'              => 'integer',
+			'description'       => 'Canonical main-site article post ID used for this social draft.',
+			'default'           => 0,
+			'single'            => true,
+			'show_in_rest'      => true,
+			'sanitize_callback' => 'absint',
+		),
+		META_SOURCE_URL   => array(
+			'type'              => 'string',
+			'description'       => 'Canonical main-site article URL used for this social draft.',
+			'default'           => '',
+			'single'            => true,
+			'show_in_rest'      => true,
+			'sanitize_callback' => 'sanitize_url',
 		),
 	);
 

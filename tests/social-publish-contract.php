@@ -55,7 +55,9 @@ class Social_Publish_Test_Ability {
 
 function add_action() {}
 function add_filter() {}
-function register_post_meta() {}
+function register_post_meta( $post_type, $key, $args ) {
+	$GLOBALS['registered_social_meta'][ $key ] = $args;
+}
 function wp_register_ability() {}
 function __( $text ) { return $text; }
 function sanitize_key( $value ) { return strtolower( preg_replace( '/[^a-z0-9_\-]/', '', $value ) ); }
@@ -86,6 +88,11 @@ function social_assert( $condition, $message ) {
 		exit( 1 );
 	}
 }
+
+$GLOBALS['registered_social_meta'] = array();
+ExtraChillStudio\register_social_meta();
+social_assert( isset( $GLOBALS['registered_social_meta'][ ExtraChillStudio\META_SOURCE_POST ] ), 'review drafts register canonical source post identity' );
+social_assert( isset( $GLOBALS['registered_social_meta'][ ExtraChillStudio\META_SOURCE_URL ] ), 'review drafts register canonical source URL' );
 
 function social_delivery( $status = 'queued', $duplicate = false ) {
 	return array(

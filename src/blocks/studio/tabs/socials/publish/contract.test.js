@@ -3,6 +3,7 @@ import {
 	buildComposerRequest,
 	filterAvailablePlatforms,
 	normalizePublishOutcome,
+	routeComposerRequestToSite,
 	validateComposerInput,
 } from './contract';
 
@@ -71,6 +72,29 @@ describe( 'social composer contract', () => {
 			path: '/datamachine/v1/socials/post',
 			method: 'POST',
 			data: { platforms: [ 'anything' ] },
+		} );
+	} );
+
+	it( 'routes canonical article publishes to the main site for share tracking', () => {
+		const request = buildComposerRequest( composer(), {
+			post_id: 42,
+			source_url: 'https://extrachill.com/article/',
+		} );
+		expect(
+			routeComposerRequestToSite(
+				request,
+				'https://extrachill.com/',
+				'nonce'
+			)
+		).toEqual( {
+			url: 'https://extrachill.com/wp-json/datamachine/v1/socials/post',
+			method: 'POST',
+			data: {
+				post_id: 42,
+				source_url: 'https://extrachill.com/article/',
+			},
+			credentials: 'include',
+			headers: { 'X-WP-Nonce': 'nonce' },
 		} );
 	} );
 

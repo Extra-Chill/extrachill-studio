@@ -21,9 +21,15 @@ import {
 	browserComposerSchema,
 	buildComposerRequest,
 	normalizePublishOutcome,
+	routeComposerRequestToSite,
 	schemaDefaults,
 	validateComposerInput,
 } from './contract';
+import {
+	articleReviewMeta,
+	declaredSchemaInput,
+	genericArticleInput,
+} from '../article-source/contract';
 import type {
 	ComposerPlatformConfig,
 	ComposerSchemaProperty,
@@ -44,6 +50,8 @@ export interface PlatformPublishPaneProps {
 	config: ComposerPlatformConfig;
 	draft: PlatformPublishDraft;
 	onDraftChange: ( draft: PlatformPublishDraft ) => void;
+	mainSiteUrl: string;
+	restNonce: string;
 }
 
 export interface PlatformPublishDraft {
@@ -51,6 +59,8 @@ export interface PlatformPublishDraft {
 	images: SelectedImage[];
 	mediaKind: string;
 	fields: Record< string, unknown >;
+	sourcePostId: number | null;
+	sourceUrl: string;
 }
 
 interface WpPost {
@@ -91,6 +101,8 @@ const PlatformPublishPane = ( {
 	config,
 	draft,
 	onDraftChange,
+	mainSiteUrl,
+	restNonce,
 }: PlatformPublishPaneProps ): ReactElement => {
 	const contract = config.composer;
 	const [ isPublishing, setIsPublishing ] = useState( false );
@@ -372,20 +384,10 @@ const PlatformPublishPane = ( {
 	};
 
 	const genericInput = (): Record< string, unknown > =>
-		cleanInput( {
-			platforms: [ slug ],
-			caption: draft.caption.trim(),
-			media_kind: mediaKind,
-			images: draft.images.map( ( { url, alt, title } ) => ( {
-				url,
-				alt,
-				title,
-			} ) ),
-			...fields,
-		} );
+		cleanInput( genericArticleInput( draft, slug, mediaKind, fields ) );
 
 	const specializedInput = (): Record< string, unknown > =>
-		cleanInput( fields );
+		cleanInput( declaredSchemaInput( inputSchema, fields ) );
 
 	const validateInput = ( input: Record< string, unknown > ): string[] => {
 		const errors: string[] = [];
@@ -450,9 +452,18 @@ const PlatformPublishPane = ( {
 		let abortController: AbortController | null = null;
 
 		try {
+			const composerRequest = buildComposerRequest( contract, input );
+			const request =
+				contract.crossPostCompatible && draft.sourcePostId
+					? routeComposerRequestToSite(
+							composerRequest,
+							mainSiteUrl,
+							restNonce
+					  )
+					: composerRequest;
 			const response = await apiFetch<
 				CrossPostResponse | Record< string, unknown >
-			>( buildComposerRequest( contract, input ) );
+			>( request );
 			if ( contract.crossPostCompatible ) {
 				const queued = response as CrossPostResponse;
 				if ( ! queued.success || ! queued.job_id ) {
@@ -529,6 +540,8 @@ const PlatformPublishPane = ( {
 				images: [],
 				mediaKind: '',
 				fields: {},
+				sourcePostId: null,
+				sourceUrl: '',
 			} );
 		} catch ( publishError ) {
 			if ( abortController?.signal.aborted ) {
@@ -583,6 +596,7 @@ const PlatformPublishPane = ( {
 								} )
 							),
 							_studio_social_media_kind: mediaKind,
+							...articleReviewMeta( draft ),
 						},
 					},
 				} )
@@ -602,6 +616,8 @@ const PlatformPublishPane = ( {
 				images: [],
 				mediaKind: '',
 				fields: {},
+				sourcePostId: null,
+				sourceUrl: '',
 			} );
 		} catch ( submitError ) {
 			setStatus( '' );
