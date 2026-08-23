@@ -992,11 +992,26 @@
 	max-width: 22rem;
 }
 
-.ec-studio-publish-result pre {
-	max-width: 100%;
-	overflow-x: auto;
-	white-space: pre-wrap;
-	word-break: break-word;
+.ec-studio-publish-result__details {
+	display: grid;
+	gap: var(--spacing-sm);
+	margin: 0;
+}
+
+.ec-studio-publish-result__details div {
+	display: grid;
+	grid-template-columns: minmax(5rem, auto) 1fr;
+	gap: var(--spacing-sm);
+}
+
+.ec-studio-publish-result__details dt {
+	font-weight: var(--font-weight-semibold, 600);
+}
+
+.ec-studio-publish-result__details dd {
+	margin: 0;
+	min-width: 0;
+	overflow-wrap: anywhere;
 }
 
 /* Mobile: stack sidebar above content */

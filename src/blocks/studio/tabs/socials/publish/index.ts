@@ -18,7 +18,9 @@ import { studioClient } from '../../../app/client';
 import MediaPicker from '../media-picker';
 import { markLocalRequest } from '../../compose/cross-site-middleware';
 import {
+	browserComposerSchema,
 	buildComposerRequest,
+	normalizePublishOutcome,
 	schemaDefaults,
 	validateComposerInput,
 } from './contract';
@@ -111,11 +113,12 @@ const PlatformPublishPane = ( {
 	}
 
 	const platformLabel = label || slug;
+	const inputSchema = browserComposerSchema( contract.inputSchema );
 	const mediaKind = contract.mediaKinds.includes( draft.mediaKind )
 		? draft.mediaKind
 		: contract.mediaKinds[ 0 ] || '';
 	const fields = {
-		...schemaDefaults( contract.inputSchema ),
+		...schemaDefaults( inputSchema ),
 		...draft.fields,
 	};
 	const requirements = contract.mediaRequirements[ mediaKind ] || {};
@@ -285,8 +288,7 @@ const PlatformPublishPane = ( {
 	): ReactElement => {
 		const id = `ec-studio-${ slug }-${ name }`;
 		const value = fields[ name ] ?? '';
-		const required =
-			contract.inputSchema.required?.includes( name ) || false;
+		const required = inputSchema.required?.includes( name ) || false;
 		const common = {
 			id,
 			value: String( value ),
@@ -420,10 +422,7 @@ const PlatformPublishPane = ( {
 				);
 			}
 		}
-		return [
-			...errors,
-			...validateComposerInput( contract.inputSchema, input ),
-		];
+		return [ ...errors, ...validateComposerInput( inputSchema, input ) ];
 	};
 
 	const publishPost = async (): Promise< void > => {
@@ -621,9 +620,7 @@ const PlatformPublishPane = ( {
 		'media_kind',
 		'images',
 	] );
-	const schemaFields = Object.entries(
-		contract.inputSchema.properties || {}
-	).filter(
+	const schemaFields = Object.entries( inputSchema.properties || {} ).filter(
 		( [ name ] ) =>
 			( ! contract.crossPostCompatible ||
 				! excludedGenericFields.has( name ) ) &&
@@ -672,6 +669,7 @@ const PlatformPublishPane = ( {
 		contract.crossPostCompatible &&
 		! requirements.required?.includes( 'video_url' ) &&
 		! fields.video_url;
+	const outcome = result ? normalizePublishOutcome( result ) : null;
 
 	return h(
 		'div',
@@ -767,7 +765,7 @@ const PlatformPublishPane = ( {
 				...schemaFields.map( ( [ name, property ] ) =>
 					renderField( name, property )
 				),
-				videoAllowed && ! contract.inputSchema.properties?.video_url
+				videoAllowed && ! inputSchema.properties?.video_url
 					? renderField( 'video_url', {
 							type: 'string',
 							format: 'uri',
@@ -858,7 +856,7 @@ const PlatformPublishPane = ( {
 				)
 			)
 		),
-		result
+		outcome
 			? h(
 					PanelView,
 					{ className: 'ec-studio-panel', compact: true },
@@ -870,7 +868,97 @@ const PlatformPublishPane = ( {
 							null,
 							__( 'Latest publish result', 'extrachill-studio' )
 						),
-						h( 'pre', null, JSON.stringify( result, null, 2 ) )
+						h(
+							'dl',
+							{ className: 'ec-studio-publish-result__details' },
+							outcome.success !== undefined
+								? h(
+										'div',
+										null,
+										h(
+											'dt',
+											null,
+											__( 'Outcome', 'extrachill-studio' )
+										),
+										h(
+											'dd',
+											null,
+											outcome.success
+												? __(
+														'Published',
+														'extrachill-studio'
+												  )
+												: __(
+														'Failed',
+														'extrachill-studio'
+												  )
+										)
+								  )
+								: null,
+							outcome.status
+								? h(
+										'div',
+										null,
+										h(
+											'dt',
+											null,
+											__( 'Status', 'extrachill-studio' )
+										),
+										h( 'dd', null, outcome.status )
+								  )
+								: null,
+							outcome.id
+								? h(
+										'div',
+										null,
+										h(
+											'dt',
+											null,
+											__( 'Post ID', 'extrachill-studio' )
+										),
+										h( 'dd', null, outcome.id )
+								  )
+								: null,
+							outcome.privacy
+								? h(
+										'div',
+										null,
+										h(
+											'dt',
+											null,
+											__( 'Privacy', 'extrachill-studio' )
+										),
+										h( 'dd', null, outcome.privacy )
+								  )
+								: null,
+							outcome.url
+								? h(
+										'div',
+										null,
+										h(
+											'dt',
+											null,
+											__( 'Link', 'extrachill-studio' )
+										),
+										h(
+											'dd',
+											null,
+											h(
+												'a',
+												{
+													href: outcome.url,
+													target: '_blank',
+													rel: 'noreferrer',
+												},
+												__(
+													'View published post',
+													'extrachill-studio'
+												)
+											)
+										)
+								  )
+								: null
+						)
 					)
 			  )
 			: null

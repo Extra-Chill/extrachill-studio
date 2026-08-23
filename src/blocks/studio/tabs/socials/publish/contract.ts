@@ -49,6 +49,14 @@ export interface ComposerRequest {
 	data: Record< string, unknown >;
 }
 
+export interface PublishOutcome {
+	success?: boolean;
+	status?: string;
+	id?: string;
+	url?: string;
+	privacy?: string;
+}
+
 export const filterAvailablePlatforms = (
 	platforms: ComposerPlatformConfig[],
 	allowedSlugs: string[]
@@ -99,6 +107,82 @@ export const schemaDefaults = (
 			.filter( ( [ , property ] ) => property.default !== undefined )
 			.map( ( [ name, property ] ) => [ name, property.default ] )
 	);
+
+const isBrowserField = (
+	name: string,
+	property?: ComposerSchemaProperty
+): boolean =>
+	! name.endsWith( '_file_path' ) &&
+	! /absolute local path/i.test( property?.description || '' );
+
+export const browserComposerSchema = (
+	schema: ComposerInputSchema
+): ComposerInputSchema => {
+	if ( ! schema.oneOf?.length ) {
+		return schema;
+	}
+
+	const properties = schema.properties || {};
+	const selected = schema.oneOf.find( ( option ) =>
+		( option.required || [] ).every( ( name ) =>
+			isBrowserField( name, properties[ name ] )
+		)
+	);
+	if ( ! selected ) {
+		return schema;
+	}
+
+	const alternateFields = schema.oneOf.flatMap(
+		( option ) => option.required || []
+	);
+	return {
+		...schema,
+		required: [
+			...new Set( [
+				...( schema.required || [] ),
+				...( selected.required || [] ),
+			] ),
+		],
+		oneOf: undefined,
+		properties: Object.fromEntries(
+			Object.entries( properties ).filter(
+				( [ name, property ] ) =>
+					! alternateFields.includes( name ) ||
+					( selected.required || [] ).includes( name ) ||
+					isBrowserField( name, property )
+			)
+		),
+	};
+};
+
+export const normalizePublishOutcome = (
+	result: Record< string, unknown >
+): PublishOutcome => {
+	const firstString = ( names: string[] ): string | undefined => {
+		for ( const name of names ) {
+			if ( typeof result[ name ] === 'string' && result[ name ] ) {
+				return result[ name ] as string;
+			}
+		}
+		return undefined;
+	};
+
+	return {
+		success:
+			typeof result.success === 'boolean' ? result.success : undefined,
+		status: firstString( [ 'status' ] ),
+		id: firstString( [
+			'platform_post_id',
+			'video_id',
+			'public_post_id',
+			'publish_id',
+			'media_id',
+			'post_id',
+		] ),
+		url: firstString( [ 'platform_url', 'post_url', 'url', 'permalink' ] ),
+		privacy: firstString( [ 'privacy_status', 'privacy_level' ] ),
+	};
+};
 
 const hasValue = ( value: unknown ): boolean =>
 	value !== undefined && value !== null && value !== '';

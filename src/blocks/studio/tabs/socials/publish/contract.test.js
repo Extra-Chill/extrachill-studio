@@ -1,6 +1,8 @@
 import {
+	browserComposerSchema,
 	buildComposerRequest,
 	filterAvailablePlatforms,
+	normalizePublishOutcome,
 	validateComposerInput,
 } from './contract';
 
@@ -107,6 +109,54 @@ describe( 'social composer contract', () => {
 
 		expect( errors.join( ' ' ) ).toContain( 'title' );
 		expect( errors.join( ' ' ) ).toContain( 'video' );
+	} );
+
+	it( 'selects the browser URL branch and omits server-only file paths', () => {
+		const schema = browserComposerSchema( {
+			type: 'object',
+			required: [ 'title' ],
+			oneOf: [
+				{ required: [ 'video_file_path' ] },
+				{ required: [ 'video_url' ] },
+			],
+			properties: {
+				title: { type: 'string' },
+				video_file_path: {
+					type: 'string',
+					description: 'Absolute local path to the video file',
+				},
+				video_url: { type: 'string', format: 'uri' },
+			},
+		} );
+
+		expect( schema.properties ).not.toHaveProperty( 'video_file_path' );
+		expect( schema.properties ).toHaveProperty( 'video_url' );
+		expect( schema.required ).toEqual( [ 'title', 'video_url' ] );
+		expect(
+			validateComposerInput( schema, { title: 'Browser upload' } ).join(
+				' '
+			)
+		).toContain( 'video url' );
+	} );
+
+	it( 'normalizes publish results without exposing arbitrary response data', () => {
+		expect(
+			normalizePublishOutcome( {
+				success: true,
+				status: 'complete',
+				video_id: 'video-123',
+				url: 'https://example.com/watch/video-123',
+				privacy_status: 'private',
+				access_token: 'must-not-render',
+				raw: { debug: true },
+			} )
+		).toEqual( {
+			success: true,
+			status: 'complete',
+			id: 'video-123',
+			url: 'https://example.com/watch/video-123',
+			privacy: 'private',
+		} );
 	} );
 
 	it( 'does not need a platform slug to choose specialized routing', () => {
