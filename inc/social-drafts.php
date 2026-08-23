@@ -231,25 +231,69 @@ function enqueue_social_publish( \WP_Post $post ): array {
 
 	$platforms  = get_post_meta( $post->ID, META_PLATFORMS, true );
 	$media_kind = (string) get_post_meta( $post->ID, META_MEDIA_KIND, true );
-	$result     = execute_social_publish_ability(
+	$input      = array(
+		'content_ref'     => array(
+			'post_id'      => $post->ID,
+			'source_url'   => get_permalink( $post ),
+			'caption'      => $caption,
+			'content_hash' => hash( 'sha256', $caption ),
+			'asset_refs'   => $assets,
+		),
+		'target_policy'   => array(
+			'channels'   => array_values( (array) $platforms ),
+			'media_kind' => $media_kind ? $media_kind : 'image',
+		),
+		'idempotency_key' => social_publish_idempotency_key( $post->ID ),
+	);
+	$attribution = social_source_attribution( $post->ID );
+	if ( $attribution ) {
+		$input['attribution_post'] = $attribution;
+	}
+
+	$result = execute_social_publish_ability(
 		'datamachine/enqueue-social-publish',
-		array(
-			'content_ref'     => array(
-				'post_id'      => $post->ID,
-				'source_url'   => get_permalink( $post ),
-				'caption'      => $caption,
-				'content_hash' => hash( 'sha256', $caption ),
-				'asset_refs'   => $assets,
-			),
-			'target_policy'   => array(
-				'channels'   => array_values( (array) $platforms ),
-				'media_kind' => $media_kind ? $media_kind : 'image',
-			),
-			'idempotency_key' => social_publish_idempotency_key( $post->ID ),
-		)
+		$input
 	);
 
 	return $result;
+}
+
+/** Resolve a valid canonical article attribution without replacing the review resource. */
+function social_source_attribution( int $review_post_id ): ?array {
+	$source_post_id = (int) get_post_meta( $review_post_id, META_SOURCE_POST, true );
+	$source_url     = (string) get_post_meta( $review_post_id, META_SOURCE_URL, true );
+	$main_blog_id   = function_exists( 'ec_get_blog_id' ) ? (int) ec_get_blog_id( 'main' ) : 0;
+
+	if ( $source_post_id <= 0 || '' === $source_url || $main_blog_id <= 0 ) {
+		return null;
+	}
+
+	$switched = get_current_blog_id() !== $main_blog_id;
+	if ( $switched ) {
+		switch_to_blog( $main_blog_id );
+	}
+
+	try {
+		$source    = get_post( $source_post_id );
+		$canonical = $source instanceof \WP_Post ? get_permalink( $source ) : false;
+		if (
+			! $source instanceof \WP_Post
+			|| 'publish' !== $source->post_status
+			|| ! is_string( $canonical )
+			|| ! hash_equals( $canonical, $source_url )
+		) {
+			return null;
+		}
+	} finally {
+		if ( $switched ) {
+			restore_current_blog();
+		}
+	}
+
+	return array(
+		'site_id' => $main_blog_id,
+		'post_id' => $source_post_id,
+	);
 }
 
 /**
