@@ -208,6 +208,15 @@ social_assert( 'https://studio.example.test/social-42/' === $article_input['cont
 social_assert( 'studio-social-publish:12:42' === $article_input['idempotency_key'], 'article attribution preserves review idempotency identity' );
 
 $post_id = reset_social_test();
+$GLOBALS['social_meta'][ $post_id ][ ExtraChillStudio\META_SOURCE_POST ] = 99;
+$GLOBALS['social_responses']['datamachine/enqueue-social-publish'] = array( social_delivery() );
+$invalid_attribution = ExtraChillStudio\enqueue_social_publish( $GLOBALS['social_posts'][ $post_id ] );
+social_assert( ! $invalid_attribution['success'], 'invalid declared attribution blocks review enqueue' );
+social_assert( 'social_publish_attribution_invalid' === $invalid_attribution['error']['code'], 'invalid attribution uses a stable error code' );
+social_assert( false === $invalid_attribution['error']['retryable'], 'invalid attribution is non-retryable' );
+social_assert( array() === $GLOBALS['social_calls'], 'invalid attribution fails before calling Socials' );
+
+$post_id = reset_social_test();
 $GLOBALS['social_meta'][ $post_id ][ ExtraChillStudio\META_DELIVERY_REF ] = 'dop_' . str_repeat( 'a', 64 );
 $GLOBALS['social_responses']['datamachine/retry-social-publish'] = array( social_delivery( 'retrying' ) );
 $retried = ExtraChillStudio\retry_social_publish( $post_id );

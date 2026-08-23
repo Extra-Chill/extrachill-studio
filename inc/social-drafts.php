@@ -246,6 +246,9 @@ function enqueue_social_publish( \WP_Post $post ): array {
 		'idempotency_key' => social_publish_idempotency_key( $post->ID ),
 	);
 	$attribution = social_source_attribution( $post->ID );
+	if ( is_wp_error( $attribution ) ) {
+		return social_publish_error( (string) $attribution->get_error_code(), $attribution->get_error_message(), false );
+	}
 	if ( $attribution ) {
 		$input['attribution_post'] = $attribution;
 	}
@@ -258,14 +261,22 @@ function enqueue_social_publish( \WP_Post $post ): array {
 	return $result;
 }
 
-/** Resolve a valid canonical article attribution without replacing the review resource. */
-function social_source_attribution( int $review_post_id ): ?array {
+/**
+ * Resolve canonical article attribution without replacing the review resource.
+ *
+ * @return array|null|\WP_Error Attribution, null for legacy drafts, or a stable
+ *                              error when declared attribution is invalid.
+ */
+function social_source_attribution( int $review_post_id ) {
 	$source_post_id = (int) get_post_meta( $review_post_id, META_SOURCE_POST, true );
 	$source_url     = (string) get_post_meta( $review_post_id, META_SOURCE_URL, true );
 	$main_blog_id   = function_exists( 'ec_get_blog_id' ) ? (int) ec_get_blog_id( 'main' ) : 0;
 
-	if ( $source_post_id <= 0 || '' === $source_url || $main_blog_id <= 0 ) {
+	if ( $source_post_id <= 0 && '' === $source_url ) {
 		return null;
+	}
+	if ( $source_post_id <= 0 || '' === $source_url || $main_blog_id <= 0 ) {
+		return social_attribution_error();
 	}
 
 	$switched = get_current_blog_id() !== $main_blog_id;
@@ -282,7 +293,7 @@ function social_source_attribution( int $review_post_id ): ?array {
 			|| ! is_string( $canonical )
 			|| ! hash_equals( $canonical, $source_url )
 		) {
-			return null;
+			return social_attribution_error();
 		}
 	} finally {
 		if ( $switched ) {
@@ -293,6 +304,14 @@ function social_source_attribution( int $review_post_id ): ?array {
 	return array(
 		'site_id' => $main_blog_id,
 		'post_id' => $source_post_id,
+	);
+}
+
+/** Construct the stable fail-closed error for invalid declared attribution. */
+function social_attribution_error(): \WP_Error {
+	return new \WP_Error(
+		'social_publish_attribution_invalid',
+		__( 'The source article attribution is no longer valid.', 'extrachill-studio' )
 	);
 }
 
