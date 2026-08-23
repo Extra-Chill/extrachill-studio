@@ -155,6 +155,15 @@ export const browserComposerSchema = (
 	};
 };
 
+const isUri = ( value: string ): boolean => {
+	try {
+		const url = new URL( value );
+		return url.protocol === 'https:' || url.protocol === 'http:';
+	} catch {
+		return false;
+	}
+};
+
 export const normalizePublishOutcome = (
 	result: Record< string, unknown >
 ): PublishOutcome => {
@@ -166,6 +175,13 @@ export const normalizePublishOutcome = (
 		}
 		return undefined;
 	};
+
+	const url = firstString( [
+		'platform_url',
+		'post_url',
+		'url',
+		'permalink',
+	] );
 
 	return {
 		success:
@@ -179,22 +195,13 @@ export const normalizePublishOutcome = (
 			'media_id',
 			'post_id',
 		] ),
-		url: firstString( [ 'platform_url', 'post_url', 'url', 'permalink' ] ),
+		url: url && isUri( url ) ? url : undefined,
 		privacy: firstString( [ 'privacy_status', 'privacy_level' ] ),
 	};
 };
 
 const hasValue = ( value: unknown ): boolean =>
 	value !== undefined && value !== null && value !== '';
-
-const isUri = ( value: string ): boolean => {
-	try {
-		const url = new URL( value );
-		return url.protocol === 'https:' || url.protocol === 'http:';
-	} catch {
-		return false;
-	}
-};
 
 export const validateComposerInput = (
 	schema: ComposerInputSchema,

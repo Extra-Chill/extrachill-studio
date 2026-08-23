@@ -159,6 +159,15 @@ describe( 'social composer contract', () => {
 		} );
 	} );
 
+	it( 'rejects unsafe publish result URLs', () => {
+		expect(
+			normalizePublishOutcome( {
+				success: true,
+				url: 'javascript:alert(document.domain)',
+			} )
+		).toEqual( { success: true } );
+	} );
+
 	it( 'does not need a platform slug to choose specialized routing', () => {
 		const contract = composer( {
 			crossPostCompatible: false,
