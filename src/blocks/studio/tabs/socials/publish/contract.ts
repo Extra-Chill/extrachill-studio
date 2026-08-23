@@ -49,14 +49,6 @@ export interface ComposerRequest {
 	data: Record< string, unknown >;
 }
 
-export interface CrossSiteComposerRequest {
-	url: string;
-	method: 'POST';
-	data: Record< string, unknown >;
-	credentials: RequestCredentials;
-	headers: Record< string, string >;
-}
-
 export interface PublishOutcome {
 	success?: boolean;
 	status?: string;
@@ -106,21 +98,6 @@ export const buildComposerRequest = (
 		'This publisher does not declare a supported composer transport.'
 	);
 };
-
-export const routeComposerRequestToSite = (
-	request: ComposerRequest,
-	siteUrl: string,
-	restNonce: string
-): CrossSiteComposerRequest => ( {
-	url: new URL(
-		`wp-json${ request.path }`,
-		siteUrl.endsWith( '/' ) ? siteUrl : `${ siteUrl }/`
-	).toString(),
-	method: request.method,
-	data: request.data,
-	credentials: 'include',
-	headers: { 'X-WP-Nonce': restNonce },
-} );
 
 export const schemaDefaults = (
 	schema: ComposerInputSchema

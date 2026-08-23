@@ -225,6 +225,7 @@ export const genericArticleInput = (
 		title,
 	} ) ),
 	post_id: draft.sourcePostId,
+	post_site_id: draft.sourcePostId ? 1 : null,
 	source_url: draft.sourceUrl,
 } );
 

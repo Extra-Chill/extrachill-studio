@@ -131,6 +131,7 @@ describe( 'article social source contract', () => {
 			genericArticleInput( selected, 'generic', 'image', selected.fields )
 		).toMatchObject( {
 			post_id: 42,
+			post_site_id: 1,
 			source_url: 'https://extrachill.com/article-42/',
 			platforms: [ 'generic' ],
 		} );
@@ -154,6 +155,7 @@ describe( 'article social source contract', () => {
 			caption: 'A social manager wrote this caption.',
 			images: [ { url: 'https://extrachill.com/uploads/override.jpg' } ],
 			post_id: 42,
+			post_site_id: 1,
 		} );
 		expect( articleReviewMeta( edited ) ).toEqual( {
 			_studio_social_source_post_id: 42,

@@ -273,10 +273,6 @@ const SocialsPane = ( { context }: StudioPaneProps ): ReactElement | null => {
 			label: selectedPlatform.label,
 			username: selectedPlatform.username,
 			config: selectedPlatform,
-			mainSiteUrl:
-				context.networkSites.find( ( site ) => site.id === 1 )?.url ||
-				'https://extrachill.com/',
-			restNonce: context.restNonce,
 		};
 
 		if ( activeCapability === 'publish' ) {

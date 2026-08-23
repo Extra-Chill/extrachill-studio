@@ -21,7 +21,6 @@ import {
 	browserComposerSchema,
 	buildComposerRequest,
 	normalizePublishOutcome,
-	routeComposerRequestToSite,
 	schemaDefaults,
 	validateComposerInput,
 } from './contract';
@@ -50,8 +49,6 @@ export interface PlatformPublishPaneProps {
 	config: ComposerPlatformConfig;
 	draft: PlatformPublishDraft;
 	onDraftChange: ( draft: PlatformPublishDraft ) => void;
-	mainSiteUrl: string;
-	restNonce: string;
 }
 
 export interface PlatformPublishDraft {
@@ -101,8 +98,6 @@ const PlatformPublishPane = ( {
 	config,
 	draft,
 	onDraftChange,
-	mainSiteUrl,
-	restNonce,
 }: PlatformPublishPaneProps ): ReactElement => {
 	const contract = config.composer;
 	const [ isPublishing, setIsPublishing ] = useState( false );
@@ -452,18 +447,9 @@ const PlatformPublishPane = ( {
 		let abortController: AbortController | null = null;
 
 		try {
-			const composerRequest = buildComposerRequest( contract, input );
-			const request =
-				contract.crossPostCompatible && draft.sourcePostId
-					? routeComposerRequestToSite(
-							composerRequest,
-							mainSiteUrl,
-							restNonce
-					  )
-					: composerRequest;
 			const response = await apiFetch<
 				CrossPostResponse | Record< string, unknown >
-			>( request );
+			>( buildComposerRequest( contract, input ) );
 			if ( contract.crossPostCompatible ) {
 				const queued = response as CrossPostResponse;
 				if ( ! queued.success || ! queued.job_id ) {

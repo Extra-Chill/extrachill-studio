@@ -228,6 +228,7 @@ add_action( 'rest_api_init', static function () use ( &$studio_persona, $studio_
 								'media_kind' => array( 'type' => 'string', 'enum' => $media_kinds ),
 								'images'     => array( 'type' => 'array' ),
 								'post_id'    => array( 'type' => 'integer' ),
+								'post_site_id' => array( 'type' => 'integer' ),
 								'source_url' => array( 'type' => 'string', 'format' => 'uri' ),
 							),
 						),
