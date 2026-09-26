@@ -43,6 +43,16 @@ jobs:
         with:
           fetch-depth: 0
 
+      # wp-native-auth lives in the chubes4/wp-native monorepo, so it cannot
+      # resolve through the Extra-Chill/<slug> component convention the other
+      # validation dependencies use. Materialize its plugin package as a
+      # sibling checkout, which is the first place homeboy looks for a
+      # declared validation dependency.
+      - name: Materialize wp-native-auth validation dependency
+        run: |
+          git clone --depth 1 https://github.com/chubes4/wp-native.git "$GITHUB_WORKSPACE/../wp-native"
+          ln -s "$GITHUB_WORKSPACE/../wp-native/plugins/wp-native-auth" "$GITHUB_WORKSPACE/../wp-native-auth"
+
       - name: Generate app token
         id: app-token
         uses: actions/create-github-app-token@v3
