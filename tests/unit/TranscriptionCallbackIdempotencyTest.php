@@ -215,9 +215,11 @@ class Test_Transcription_Callback_Idempotency extends WP_UnitTestCase {
 	}
 
 	public function fail_one_receipt_update( $query ) {
+		// Anchor on the UPDATE keyword: add_option() writes receipts with an
+		// INSERT ... ON DUPLICATE KEY UPDATE statement, which must pass through.
 		if (
 			$this->fail_updates > 0
-			&& false !== strpos( (string) $query, 'UPDATE' )
+			&& 0 === strpos( ltrim( (string) $query ), 'UPDATE' )
 			&& false !== strpos( (string) $query, '_ec_studio_transcription_' )
 		) {
 			--$this->fail_updates;

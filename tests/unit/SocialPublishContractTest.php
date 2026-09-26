@@ -179,6 +179,10 @@ class Test_Social_Publish_Contract extends WP_UnitTestCase {
 		$post_id = $this->reset_social_test();
 		wp_unregister_ability( 'datamachine/enqueue-social-publish' );
 
+		// wp_get_ability() reports the missing dependency through core's
+		// incorrect-usage channel; the handler must still fail closed.
+		$this->setExpectedIncorrectUsage( 'WP_Abilities_Registry::get_registered' );
+
 		$missing = ExtraChillStudio\enqueue_social_publish( get_post( $post_id ) );
 
 		$this->assertFalse( $missing['success'], 'Missing Socials dependency fails closed.' );
