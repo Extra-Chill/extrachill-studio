@@ -489,16 +489,22 @@ function ec_studio_notify_editor_of_stranded_post( int $blog_id, int $post_id, i
 			'error'   => $exception->getMessage(),
 		);
 	}
-	$queued = ! empty( $queue['success'] );
+	// The mail ability returns WP_Error on permission/validation failure.
+	// Never index into it: that fatals and strands the receipt (see #209).
+	$queued = is_array( $queue ) && ! empty( $queue['success'] );
 	if ( ! $queued ) {
+		$detail = is_wp_error( $queue )
+			? $queue->get_error_code() . ': ' . $queue->get_error_message()
+			: ( is_array( $queue ) && isset( $queue['error'] ) && is_scalar( $queue['error'] ) ? (string) $queue['error'] : 'success=false' );
 		// Unreachable when the release helper is missing: $owns_email already
 		// gated on it before the receipt was claimed.
 		$released = ec_users_release_notification_receipt( $notification_id, $recipient_id, EC_STUDIO_STRANDED_PRODUCER, $idempotency_key );
 		error_log( // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Canonical operational logging surface.
 			sprintf(
-				'[extrachill-studio] Failed to queue the stranded-post email for blog %1$d post %2$d; receipt released: %3$s.',
+				'[extrachill-studio] Failed to queue the stranded-post email for blog %1$d post %2$d (%3$s); receipt released: %4$s.',
 				$blog_id,
 				$post_id,
+				$detail,
 				$released ? 'yes' : 'no'
 			)
 		);
