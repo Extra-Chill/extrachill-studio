@@ -14,7 +14,10 @@
         "wp_codebox_database_service": {
           "provider": "external",
           "engine": "mysql",
-          "allowed_hosts": ["127.0.0.1:3306"],
+          "allowed_hosts": [
+            "127.0.0.1:3306",
+            "127.0.0.1:3307"
+          ],
           "secret_env": {
             "host": "WP_CODEBOX_DB_HOST",
             "port": "WP_CODEBOX_DB_PORT",
@@ -43,10 +46,10 @@
     {
       "file": "extrachill-studio.php",
       "pattern": "EXTRACHILL_STUDIO_VERSION',\\s*'([\\d.]+)"
-	},
-	{
-	  "file": "src/blocks/studio/block.json",
-	  "pattern": "\"version\":\\s*\"([0-9.]+)\""
+    },
+    {
+      "file": "src/blocks/studio/block.json",
+      "pattern": "\"version\":\\s*\"([0-9.]+)\""
     }
   ]
 }

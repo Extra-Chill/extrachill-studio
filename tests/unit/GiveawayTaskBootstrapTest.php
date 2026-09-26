@@ -51,15 +51,17 @@ class Test_Giveaway_Task_Bootstrap extends WP_UnitTestCase {
 		spl_autoload_register( $aliaser );
 
 		try {
-			$expected = $existing + array( 'giveaway' => 'ExtraChillStudio\\Tasks\\GiveawayTask' );
+			// Other network plugins (e.g. extrachill-network) may contribute
+			// their own tasks through the same filter once the parent class
+			// exists; only Studio's own registration is asserted here.
 			$this->assertSame(
-				$expected,
-				apply_filters( 'datamachine_tasks', $existing ),
+				'ExtraChillStudio\\Tasks\\GiveawayTask',
+				apply_filters( 'datamachine_tasks', $existing )['giveaway'] ?? null,
 				'Giveaway must register when its parent is available.'
 			);
 			$this->assertSame(
-				$expected,
-				apply_filters( 'datamachine_tasks', $existing ),
+				'ExtraChillStudio\\Tasks\\GiveawayTask',
+				apply_filters( 'datamachine_tasks', $existing )['giveaway'] ?? null,
 				'Repeat registry reads stay stable.'
 			);
 		} finally {

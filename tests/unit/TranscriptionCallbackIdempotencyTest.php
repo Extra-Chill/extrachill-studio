@@ -47,13 +47,15 @@ class Test_Transcription_Callback_Idempotency extends WP_UnitTestCase {
 		$this->nested_request  = null;
 		$this->nested_result   = null;
 
-		$this->register_test_double_ability( 'extrachill/track-analytics-event' );
-		$this->register_test_double_ability( 'datamachine/send-email' );
+		$this->register_test_abilities();
 	}
 
 	protected function tearDown(): void {
-		wp_unregister_ability( 'extrachill/track-analytics-event' );
-		wp_unregister_ability( 'datamachine/send-email' );
+		foreach ( array( 'extrachill/track-analytics-event', 'datamachine/send-email' ) as $name ) {
+			if ( wp_has_ability( $name ) ) {
+				wp_unregister_ability( $name );
+			}
+		}
 		delete_site_option( 'sweatpants_signed_token_secret' );
 		remove_filter( 'rest_pre_insert_post', array( $this, 'dispatch_nested_callback' ), 10 );
 		remove_filter( 'query', array( $this, 'fail_one_receipt_update' ) );
@@ -61,22 +63,58 @@ class Test_Transcription_Callback_Idempotency extends WP_UnitTestCase {
 		parent::tearDown();
 	}
 
-	private function register_test_double_ability( string $name ): void {
-		$this->assertFalse(
-			wp_has_ability( $name ),
-			"The isolated test runtime must own the {$name} ability; a real registration would defeat the interception."
-		);
-
+	/**
+	 * Own the analytics and mail abilities with capturing test doubles.
+	 *
+	 * The abilities registry lazily initializes on first access and fires
+	 * wp_abilities_api_init with every activated plugin's registrar attached,
+	 * so the real analytics ability may already exist. Core's
+	 * wp_register_ability() refuses registrations outside that action, which
+	 * is why the doubles are registered through a re-fired action holding
+	 * only this test's registrar (WP_UnitTestCase restores hooks between
+	 * tests; the registry itself is process-global, so tearDown unregisters
+	 * the doubles).
+	 */
+	private function register_test_abilities(): void {
 		if ( function_exists( 'wp_has_ability_category' ) && ! wp_has_ability_category( 'extrachill' ) ) {
-			wp_register_ability_category(
-				'extrachill',
-				array(
-					'label'       => 'Extra Chill',
-					'description' => 'Extra Chill platform tools and workflows.',
-				)
-			);
+			remove_all_actions( 'wp_abilities_api_categories_init' );
+			add_action( 'wp_abilities_api_categories_init', array( $this, 'register_test_category' ) );
+			do_action( 'wp_abilities_api_categories_init' );
 		}
 
+		foreach ( array( 'extrachill/track-analytics-event', 'datamachine/send-email' ) as $name ) {
+			if ( wp_has_ability( $name ) ) {
+				wp_unregister_ability( $name );
+			}
+		}
+
+		remove_all_actions( 'wp_abilities_api_init' );
+		add_action( 'wp_abilities_api_init', array( $this, 'register_test_double_abilities' ) );
+		do_action( 'wp_abilities_api_init' );
+
+		foreach ( array( 'extrachill/track-analytics-event', 'datamachine/send-email' ) as $name ) {
+			if ( ! wp_has_ability( $name ) ) {
+				$this->fail( "Failed to register the {$name} test double." );
+			}
+		}
+	}
+
+	public function register_test_category(): void {
+		wp_register_ability_category(
+			'extrachill',
+			array(
+				'label'       => 'Extra Chill',
+				'description' => 'Extra Chill platform tools and workflows.',
+			)
+		);
+	}
+
+	public function register_test_double_abilities(): void {
+		$this->register_test_double_ability( 'extrachill/track-analytics-event' );
+		$this->register_test_double_ability( 'datamachine/send-email' );
+	}
+
+	private function register_test_double_ability( string $name ): void {
 		if ( 'datamachine/send-email' === $name ) {
 			$output_schema = array( 'type' => 'object' );
 			$execute       = function ( $args ) {

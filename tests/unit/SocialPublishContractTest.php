@@ -40,16 +40,21 @@ class Test_Social_Publish_Contract extends WP_UnitTestCase {
 		$GLOBALS['ec_studio_social_test_calls']     = array();
 		$GLOBALS['ec_studio_social_test_responses'] = array();
 
-		$this->ensure_category();
-		$this->register_calls_capture_ability( 'datamachine/enqueue-social-publish' );
-		$this->register_calls_capture_ability( 'datamachine/retry-social-publish' );
-		$this->register_calls_capture_ability( 'datamachine/get-social-publish' );
+		$this->register_test_abilities();
 	}
 
 	protected function tearDown(): void {
-		wp_unregister_ability( 'datamachine/enqueue-social-publish' );
-		wp_unregister_ability( 'datamachine/retry-social-publish' );
-		wp_unregister_ability( 'datamachine/get-social-publish' );
+		foreach (
+			array(
+				'datamachine/enqueue-social-publish',
+				'datamachine/retry-social-publish',
+				'datamachine/get-social-publish',
+			) as $name
+		) {
+			if ( wp_has_ability( $name ) ) {
+				wp_unregister_ability( $name );
+			}
+		}
 		unset( $GLOBALS['ec_studio_social_test_calls'], $GLOBALS['ec_studio_social_test_responses'] );
 		if ( get_current_blog_id() === $this->studio_blog_id ) {
 			restore_current_blog();
@@ -58,37 +63,72 @@ class Test_Social_Publish_Contract extends WP_UnitTestCase {
 		parent::tearDown();
 	}
 
-	private function ensure_category(): void {
+	/**
+	 * Own the Socials owner abilities with capturing test doubles.
+	 *
+	 * Core's wp_register_ability() refuses registrations outside the
+	 * wp_abilities_api_init action, so the doubles are registered through a
+	 * re-fired action holding only this test's registrar (WP_UnitTestCase
+	 * restores hooks between tests; the registry itself is process-global,
+	 * so tearDown unregisters the doubles). Data Machine Socials is
+	 * deliberately not a validation dependency: the doubles replace the
+	 * owner contract these tests assert on.
+	 */
+	private function register_test_abilities(): void {
 		if ( function_exists( 'wp_has_ability_category' ) && ! wp_has_ability_category( 'extrachill' ) ) {
-			wp_register_ability_category(
-				'extrachill',
-				array(
-					'label'       => 'Extra Chill',
-					'description' => 'Extra Chill platform tools and workflows.',
-				)
-			);
+			remove_all_actions( 'wp_abilities_api_categories_init' );
+			add_action( 'wp_abilities_api_categories_init', array( $this, 'register_test_category' ) );
+			do_action( 'wp_abilities_api_categories_init' );
+		}
+
+		foreach ( array( 'datamachine/enqueue-social-publish', 'datamachine/retry-social-publish', 'datamachine/get-social-publish' ) as $name ) {
+			if ( wp_has_ability( $name ) ) {
+				wp_unregister_ability( $name );
+			}
+		}
+
+		remove_all_actions( 'wp_abilities_api_init' );
+		add_action( 'wp_abilities_api_init', array( $this, 'register_test_double_abilities' ) );
+		do_action( 'wp_abilities_api_init' );
+
+		foreach ( array( 'datamachine/enqueue-social-publish', 'datamachine/retry-social-publish', 'datamachine/get-social-publish' ) as $name ) {
+			if ( ! wp_has_ability( $name ) ) {
+				$this->fail( "Failed to register the {$name} test double." );
+			}
 		}
 	}
 
-	private function register_calls_capture_ability( string $name ): void {
-		wp_register_ability(
-			$name,
+	public function register_test_category(): void {
+		wp_register_ability_category(
+			'extrachill',
 			array(
-				'label'               => 'Test double',
-				'description'         => 'Captures Studio social publish owner calls.',
-				'category'            => 'extrachill',
-				'input_schema'        => array( 'type' => 'object' ),
-				'output_schema'       => array( 'type' => 'object' ),
-				'permission_callback' => '__return_true',
-				'execute_callback'    => static function ( $input ) use ( $name ) {
-					$GLOBALS['ec_studio_social_test_calls'][] = array(
-						'name'  => $name,
-						'input' => $input,
-					);
-					return array_shift( $GLOBALS['ec_studio_social_test_responses'][ $name ] );
-				},
+				'label'       => 'Extra Chill',
+				'description' => 'Extra Chill platform tools and workflows.',
 			)
 		);
+	}
+
+	public function register_test_double_abilities(): void {
+		foreach ( array( 'datamachine/enqueue-social-publish', 'datamachine/retry-social-publish', 'datamachine/get-social-publish' ) as $name ) {
+			wp_register_ability(
+				$name,
+				array(
+					'label'               => 'Test double',
+					'description'         => 'Captures Studio social publish owner calls.',
+					'category'            => 'extrachill',
+					'input_schema'        => array( 'type' => 'object' ),
+					'output_schema'       => array( 'type' => 'object' ),
+					'permission_callback' => '__return_true',
+					'execute_callback'    => static function ( $input ) use ( $name ) {
+						$GLOBALS['ec_studio_social_test_calls'][] = array(
+							'name'  => $name,
+							'input' => $input,
+						);
+						return array_shift( $GLOBALS['ec_studio_social_test_responses'][ $name ] );
+					},
+				)
+			);
+		}
 	}
 
 	private function social_delivery( string $status = 'queued', bool $duplicate = false ): array {
