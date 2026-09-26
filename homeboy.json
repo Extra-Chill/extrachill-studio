@@ -9,7 +9,7 @@
           "extrachill-network",
           "extrachill-users",
           "extrachill-analytics",
-          "wp-native-auth"
+          "../wp-native-auth"
         ],
         "wp_codebox_database_service": {
           "provider": "external",
