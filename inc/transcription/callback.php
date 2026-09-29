@@ -770,7 +770,7 @@ function ec_studio_transcription_callback_send_email(
 
 	$result = ec_studio_transcription_send_mail( $email_args );
 
-	$sent = is_array( $result ) && ! empty( $result['success'] );
+	$sent = ! empty( $result['success'] );
 
 	if ( ! $sent ) {
 		// Log WHY the send failed.
@@ -781,12 +781,9 @@ function ec_studio_transcription_callback_send_email(
 		// distinct failure — wrong SMTP site, ability permission short-circuit,
 		// transport error — produced the exact same opaque 503 with no SMTP
 		// row and no PHP error to distinguish them.
-		if ( is_wp_error( $result ) ) {
-			$detail = sprintf( 'WP_Error %1$s: %2$s', $result->get_error_code(), $result->get_error_message() );
-		} elseif ( is_array( $result ) ) {
-			$detail = isset( $result['error'] ) ? (string) $result['error'] : 'envelope reported success=false with no error key';
-		} else {
-			$detail = 'unexpected return type ' . gettype( $result );
+		$detail = isset( $result['error'] ) ? (string) $result['error'] : 'envelope reported success=false with no error key';
+		if ( isset( $result['error_code'] ) ) {
+			$detail = $result['error_code'] . ': ' . $detail;
 		}
 
 		error_log( // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Deliberate operational log; see #199.
