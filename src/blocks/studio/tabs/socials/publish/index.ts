@@ -396,6 +396,7 @@ const PlatformPublishPane = ({
 		});
 		setStatus(
 			sprintf(
+				/* translators: %s: media item title. */
 				__('%s added to clip queue.', 'extrachill-studio'),
 				item.title || item.sourceId
 			)
