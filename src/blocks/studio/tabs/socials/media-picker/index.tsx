@@ -64,6 +64,9 @@ export interface MediaPickerProps {
  * @param root0
  * @param root0.onSelect
  * @param root0.className
+ * @param root0.mediaType
+ * @param root0.multiple
+ * @param root0.selectedUrls
  */
 const MediaPicker = ({
 	onSelect,
@@ -123,7 +126,7 @@ const MediaPicker = ({
 				setIsLoading(false);
 			}
 		},
-		[]
+		[mediaType]
 	);
 
 	// Initial load.
@@ -269,10 +272,10 @@ const MediaPicker = ({
 						className: 'ec-studio-media-picker__upload-btn',
 						onClick: triggerUpload,
 						disabled: isUploading,
-						'aria-label': __(
-							mediaType === 'video' ? 'Upload video clip' : 'Upload new image',
-							'extrachill-studio'
-						),
+						'aria-label':
+							mediaType === 'video'
+								? __('Upload video clip', 'extrachill-studio')
+								: __('Upload new image', 'extrachill-studio'),
 					},
 					createElement(
 						'span',
