@@ -23,7 +23,7 @@ defined( 'ABSPATH' ) || exit;
  * - per_user: every person with at least one qualifying comment holds exactly
  *   one entry.
  */
-const EC_STUDIO_GIVEAWAY_ENTRY_MODES   = array( 'per_comment', 'per_user' );
+const EC_STUDIO_GIVEAWAY_ENTRY_MODES  = array( 'per_comment', 'per_user' );
 const EC_STUDIO_GIVEAWAY_DEFAULT_MODE = 'per_comment';
 
 /**
@@ -114,9 +114,13 @@ function ec_studio_pick_giveaway_winners( array $entries, int $count ): array {
 	$pool    = array_values( $entries );
 	$winners = array();
 
-	while ( count( $winners ) < $count && ! empty( $pool ) ) {
-		$winner    = $pool[ random_int( 0, count( $pool ) - 1 ) ];
+	$drawn   = 0;
+
+	while ( $drawn < $count && ! empty( $pool ) ) {
+		$pool_size = count( $pool );
+		$winner    = $pool[ random_int( 0, $pool_size - 1 ) ];
 		$winners[] = $winner;
+		++$drawn;
 
 		$username = strtolower( $winner['author_username'] ?? '' );
 		$pool     = array_values(
