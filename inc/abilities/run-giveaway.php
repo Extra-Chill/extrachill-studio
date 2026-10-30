@@ -113,7 +113,6 @@ function ec_studio_filter_giveaway_entries( array $comments, array $rules, array
 function ec_studio_pick_giveaway_winners( array $entries, int $count ): array {
 	$pool    = array_values( $entries );
 	$winners = array();
-
 	$drawn   = 0;
 
 	while ( $drawn < $count && ! empty( $pool ) ) {
